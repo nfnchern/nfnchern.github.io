@@ -1,0 +1,14 @@
+{
+  "name": "Chord Garden — Piano Practice",
+  "short_name": "Chord Garden",
+  "description": "A pocket practice deck for piano chords.",
+  "start_url": "./chords.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101310",
+  "theme_color": "#101310",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
