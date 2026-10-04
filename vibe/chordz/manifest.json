@@ -2,7 +2,7 @@
   "name": "Chord Garden — Piano Practice",
   "short_name": "Chord Garden",
   "description": "A pocket practice deck for piano chords.",
-  "start_url": "./chords.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
