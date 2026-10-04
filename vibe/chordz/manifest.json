@@ -1,6 +1,6 @@
 {
-  "name": "Chord Garden — Piano Practice",
-  "short_name": "Chord Garden",
+  "name": "chordz — Piano Practice",
+  "short_name": "chordz",
   "description": "A pocket practice deck for piano chords.",
   "start_url": "./index.html",
   "scope": "./",
