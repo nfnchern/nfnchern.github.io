@@ -141,7 +141,7 @@
     const fundamental=nearbyPowerAt(power,noteFrequency(midi),binHz);return[2,3,4,5].map(h=>Math.max(.001,Math.min(.9,nearbyPowerAt(power,noteFrequency(midi)*h,binHz)/Math.max(fundamental,1e-12))))
   }
   function renderKeyboard(){
-    const board=$('keyboard');board.innerHTML='';if((!current||deckPaused)&&!calibration)return;const target=current?current.q.ints.map(i=>(current.root+i)%12):[],leftNotes=current?current.q.ints.map(i=>48+current.root+i):[],rightNotes=current?current.q.ints.map(i=>60+current.root+i):[],reveal=solved||guided,calibrationTargets=calibration&&!calibration.awaitingRelease?(calibration.phase==='notes'?[60+notes.indexOf(calibration.noteNames[calibration.noteIndex])]:calibration.phase==='chords'?(calibration.chordPrompts[calibration.chordIndex]?.midis||[]):[]):[];let whiteIndex=-1;for(let midi=48;midi<84;midi++){
+    const board=$('keyboard');board.innerHTML='';if((!current||deckPaused)&&!calibration)return;const target=current?current.q.ints.map(i=>(current.root+i)%12):[],leftNotes=current?current.q.ints.map(i=>48+current.root+i):[],rightNotes=current?current.q.ints.map(i=>60+current.root+i):[],reveal=solved||guided,notePrompt=calibration?.phase==='notes'?calibration.notePrompts[calibration.noteIndex]:null,calibrationTargets=calibration&&!calibration.awaitingRelease?(notePrompt?[notePrompt.midi]:calibration.phase==='chords'?(calibration.chordPrompts[calibration.chordIndex]?.midis||[]):[]):[];let whiteIndex=-1;for(let midi=48;midi<84;midi++){
       const pc=midi%12,isCalibrationTarget=calibrationTargets.includes(midi),isTarget=calibration?isCalibrationTarget:target.includes(pc),isLeft=leftNotes.includes(midi),isRight=rightNotes.includes(midi),showGuide=!calibration&&guided&&(isLeft||isRight),hand=isLeft?'left':'right',targetClass=calibration?(isCalibrationTarget?' target calibration-target':''):reveal&&showGuide?' target hand-'+hand:'';if(whitePitchClasses.includes(pc)){
         whiteIndex++;const key=document.createElement('div');key.className='key'+targetClass+(registeredNotes.has(midi)?' registered':'');key.dataset.midi=midi;key.title=noteName(midi);key.setAttribute('aria-label',noteName(midi)+(isTarget?', chord note':''));const label=document.createElement('span');label.className='keylabel';label.textContent=pc===0?noteName(midi):notes[pc];key.appendChild(label);if(showGuide){
           const marker=document.createElement('span');marker.className='key-guide guide-'+hand;marker.textContent=noteName(midi);key.appendChild(marker)
@@ -165,10 +165,10 @@
         $('round').textContent='QUIET';$('chordName').textContent='Stay quiet';$('quality').textContent='Measuring the room for two seconds.';setStatus('Room check','Keep quiet until the note prompts begin.','◉');
       }
       else if(phase==='notes'){
-        const note=calibration.noteNames[index]+'4';$('round').textContent=`${index+1}/7`;$('chordName').textContent=release?'Release':note;$('quality').textContent=release?`Let ${calibration.noteNames[Math.max(0,index-1)]}4 ring out, then play ${note}.`:`Play and hold ${note}. The prompt advances when sound is captured.`;setStatus(release?'Release the note':'Play this note',release?'Wait for the sound to fade.':'Hold the key briefly, then release it.','♪');
+        const prompt=calibration.notePrompts[index],groupIndex=index%7,handLabel=prompt.hand==='left'?'Left hand':'Right hand',previous=calibration.notePrompts[index-1];$('round').textContent=`${prompt.hand==='left'?'LH':'RH'} ${groupIndex+1}/7`;$('chordName').textContent=release?'Release':prompt.name;$('quality').textContent=release?`Let ${previous.name} ring out, then play ${prompt.name}.`:`${handLabel}: play and hold ${prompt.name}. The prompt advances when sound is captured.`;setStatus(release?'Release the note':`${handLabel} note`,release?'Wait for the sound to fade.':'Hold the key briefly, then release it.','♪');
       }
       else{
-        const chord=calibration.chordPrompts[index];$('round').textContent=`${index+1}/3`;$('chordName').textContent=release?'Release':chord.name;$('quality').textContent=release?'Let every key ring out before the next prompt.':'Play and hold the highlighted keys together.';setStatus(release?'Release the chord':'Play this chord',release?'Wait for the sound to fade.':'The prompt advances when sound is captured.','♪');
+        const chord=calibration.chordPrompts[index],groupIndex=index%6,handLabel=chord.hand==='left'?'Left hand':'Right hand';$('round').textContent=`${chord.hand==='left'?'LH':'RH'} ${groupIndex+1}/6`;$('chordName').textContent=release?'Release':chord.name;$('quality').textContent=release?'Let every key ring out before the next prompt.':`${handLabel}: play and hold the highlighted keys together.`;setStatus(release?'Release the chord':`${handLabel} chord`,release?'Wait for the sound to fade.':'The prompt advances when sound is captured.','♪');
       }
     }
     else if(current&&!deckPaused){
@@ -228,14 +228,12 @@
     $('volume').classList.add('hidden');if($('cardLabel'))render()
   }
   function beginCalibration(){
-    if(!analyser||calibration)return;calibration={
-      phase:'noise',until:performance.now()+2000,noiseSamples:[],playSum:0,playFrames:0,noteNames:['C','D','E','F','G','A','B'],noteProfiles:[],profileSamples:[],chordPrompts:[{
-        name:'C major',midis:[60,64,67],pcs:[0,4,7]
-      },{
-        name:'A minor',midis:[69,72,76],pcs:[9,0,4]
-      },{
-        name:'G7',midis:[67,71,74,77],pcs:[7,11,2,5]
-      }],chordIndex:0,chordFrames:0,chordTargetRatios:[],chordExtraRatios:[]
+    if(!analyser||calibration)return;const scaleNotes=[['C',0],['D',2],['E',4],['F',5],['G',7],['A',9],['B',11]],notePrompts=['left','right'].flatMap((hand,octave)=>scaleNotes.map(([name,offset])=>({name:`${name}${3+octave}`,hand,midi:48+12*octave+offset}))),chordPrompts=['left','right'].flatMap(hand=>levels[0].chords.map(chord=>{
+      const base=hand==='left'?48:60,midis=chord.q.ints.map(interval=>base+chord.root+interval),quality=chord.q.name==='maj'?'major':'minor';return{
+        name:`${notes[chord.root]} ${quality}`,hand,midis,pcs:chord.q.ints.map(interval=>(chord.root+interval)%12)
+      }
+    }));calibration={
+      phase:'noise',until:performance.now()+2000,noiseSamples:[],playSum:0,playFrames:0,notePrompts,noteProfiles:[],profileSamples:[],chordPrompts,chordIndex:0,chordTargetRatios:[],chordExtraRatios:[]
     };goodSince=0;registeredNotes.clear();$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Cancel calibration';$('connectionText').textContent='Calibration started';render()
   }
   async function startMic(){
@@ -267,14 +265,14 @@
       const rms=Math.sqrt(energy/samples.length);$('volumeBar').style.width=Math.min(100,rms*500)+'%';if(calibration){
         if(calibration.phase==='noise'){
           calibration.noiseSamples.push(rms);if(performance.now()>=calibration.until){
-            const levels=calibration.noiseSamples.sort((a,b)=>a-b);noiseFloor=Math.min(.04,Math.max(.0005,levels[Math.floor((levels.length-1)*.5)]||0));noisePeak=Math.min(.04,Math.max(noiseFloor,levels[Math.floor((levels.length-1)*.9)]||noiseFloor));storage.set('chord-garden-noise-floor',String(noiseFloor));storage.set('chord-garden-noise-peak',String(noisePeak));calibration.phase='notes';calibration.noteIndex=0;calibration.until=Infinity;calibration.noteLevels=[];calibration.playSum=0;calibration.playFrames=0;calibration.awaitingRelease=false;$('calibrateBtn').textContent='Cancel calibration';$('connectionText').textContent='Play C4';render();
+            const levels=calibration.noiseSamples.sort((a,b)=>a-b);noiseFloor=Math.min(.04,Math.max(.0005,levels[Math.floor((levels.length-1)*.5)]||0));noisePeak=Math.min(.04,Math.max(noiseFloor,levels[Math.floor((levels.length-1)*.9)]||noiseFloor));storage.set('chord-garden-noise-floor',String(noiseFloor));storage.set('chord-garden-noise-peak',String(noisePeak));calibration.phase='notes';calibration.noteIndex=0;calibration.until=Infinity;calibration.noteLevels=[];calibration.playSum=0;calibration.playFrames=0;calibration.awaitingRelease=false;$('calibrateBtn').textContent='Cancel calibration';$('connectionText').textContent='Play C3';render();
           }
         }
         else{
-          const signalGate=Math.min(.02,Math.max(.002,noiseFloor*1.25,noisePeak*.9,noiseFloor+.001)),releaseGate=Math.max(.002,noiseFloor*1.2,noisePeak*.95),expectedMidi=calibration.phase==='notes'?60+notes.indexOf(calibration.noteNames[calibration.noteIndex]):0;readPowerSpectrum(analyser,decibels,power);const saliences=pitchSaliences(power,binHz);if(calibration.awaitingRelease){
+          const signalGate=Math.min(.02,Math.max(.002,noiseFloor*1.25,noisePeak*.9,noiseFloor+.001)),releaseGate=Math.max(.002,noiseFloor*1.2,noisePeak*.95),expectedMidi=calibration.phase==='notes'?calibration.notePrompts[calibration.noteIndex].midi:0;readPowerSpectrum(analyser,decibels,power);const saliences=pitchSaliences(power,binHz);if(calibration.awaitingRelease){
             const adaptiveReleaseGate=Math.max(noiseFloor*1.25,noisePeak*1.1,(calibration.releaseReference||releaseGate)*.2);if(rms<adaptiveReleaseGate){
               calibration.releaseFrames=(calibration.releaseFrames||0)+1;if(calibration.releaseFrames>=6){
-                calibration.awaitingRelease=false;calibration.releaseFrames=0;calibration.playSum=0;calibration.playFrames=0;$('connectionText').textContent=calibration.phase==='notes'?'Play '+calibration.noteNames[calibration.noteIndex]+'4':'Play '+calibration.chordPrompts[calibration.chordIndex].name;render()
+                calibration.awaitingRelease=false;calibration.releaseFrames=0;calibration.playSum=0;calibration.playFrames=0;$('connectionText').textContent=calibration.phase==='notes'?'Play '+calibration.notePrompts[calibration.noteIndex].name:'Play '+calibration.chordPrompts[calibration.chordIndex].name;render()
               }
             }
             else calibration.releaseFrames=0;
@@ -283,14 +281,15 @@
             if(rms>signalGate){
               if(!calibration.playFrames){
                 let strongest=45;for(let midi=46;midi<=84;midi++)if(saliences[midi]>saliences[strongest])strongest=midi;
-                if(saliences[strongest]>1e-12)$('connectionText').textContent=`Hearing ${noteName(strongest)} · capturing ${calibration.noteNames[calibration.noteIndex]}4`;
+                if(saliences[strongest]>1e-12)$('connectionText').textContent=`Hearing ${noteName(strongest)} · capturing ${calibration.notePrompts[calibration.noteIndex].name}`;
+                setStatus('Sound detected',`Capturing ${calibration.notePrompts[calibration.noteIndex].name} · release when prompted.`,'◉');
               }
               calibration.playSum+=rms;calibration.playFrames++;calibration.profileSamples.push(measureHarmonicProfile(power,binHz,expectedMidi));if(calibration.playFrames>=8){
                 const recognized=calibrationNoteDetected(saliences,expectedMidi);calibration.noteLevels.push(calibration.playSum/calibration.playFrames);calibration.releaseReference=calibration.playSum/calibration.playFrames;
                 if(recognized)calibration.noteProfiles.push([0,1,2,3].map(i=>calibration.profileSamples.reduce((sum,profile)=>sum+profile[i],0)/calibration.profileSamples.length));
                 calibration.profileSamples=[];calibration.playSum=0;calibration.playFrames=0;calibration.noteIndex++;
-                if(calibration.noteIndex<calibration.noteNames.length){
-                  calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent=`Signal captured${recognized?' · pitch matched':' · pitch unclear, continuing'}; release, then play ${calibration.noteNames[calibration.noteIndex]}4`;render();
+                if(calibration.noteIndex<calibration.notePrompts.length){
+                  calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent=`Signal captured${recognized?' · pitch matched':' · pitch unclear, continuing'}; release, then play ${calibration.notePrompts[calibration.noteIndex].name}`;render();
                 }
                 else{
                   const levels=calibration.noteLevels.sort((a,b)=>a-b),measured=levels[Math.floor(levels.length/2)];playingLevel=Math.min(.2,measured);storage.set('chord-garden-playing-level',String(playingLevel));
@@ -305,6 +304,7 @@
           }
           else if(calibration.phase==='chords'){
             const prompt=calibration.chordPrompts[calibration.chordIndex],metrics=calibrationChordMetrics(saliences,prompt.pcs);if(rms>signalGate){
+              if(!calibration.playFrames)setStatus('Sound detected',`Capturing ${prompt.hand} hand · ${prompt.name}.`,'◉');
               calibration.playSum+=rms;if(metrics.targetRatio>.08){calibration.chordTargetRatios.push(metrics.targetRatio);calibration.chordExtraRatios.push(metrics.extraRatio)}if(++calibration.playFrames>=8){
                 calibration.releaseReference=calibration.playSum/calibration.playFrames;calibration.playSum=0;calibration.chordIndex++;calibration.playFrames=0;if(calibration.chordIndex<calibration.chordPrompts.length){
                   calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent='Sound captured; release, then play '+calibration.chordPrompts[calibration.chordIndex].name;render()
