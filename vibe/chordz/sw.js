@@ -1,4 +1,4 @@
-const CACHE = 'chord-garden-v15';
+const CACHE = 'chord-garden-v20';
 const FILES = ['./index.html', './manifest.json', './icon.svg'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES))));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))));
