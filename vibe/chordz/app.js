@@ -104,6 +104,7 @@
   })();
   let tuningCents=Math.max(-50,Math.min(50,storedNumber('chord-garden-tuning-cents',0)));
   let calibration=null;
+  const calibrationMinCaptureMs=650,calibrationMinCaptureFrames=18;
   let deckMode=storage.get('chord-garden-deck-mode')==='random'?'random':'walk';
   let progressionGraphModel=null;
   let currentProgressionIndex=null;
@@ -180,10 +181,10 @@
         $('round').textContent='QUIET';$('chordName').textContent='Stay quiet';$('quality').textContent='Measuring the room for two seconds.';setStatus('Room check','Keep quiet until the note prompts begin.','◉');
       }
       else if(phase==='notes'){
-        const prompt=calibration.notePrompts[index],groupIndex=index%7,handLabel=prompt.hand==='left'?'Left hand':'Right hand',previous=calibration.notePrompts[index-1];$('round').textContent=`${prompt.hand==='left'?'LH':'RH'} ${groupIndex+1}/7`;$('chordName').textContent=release?'Release':prompt.name;$('quality').textContent=release?`Let ${previous.name} ring out, then play ${prompt.name}.`:`${handLabel}: play and hold ${prompt.name}. The prompt advances when sound is captured.`;setStatus(release?'Release the note':`${handLabel} note`,release?'Wait for the sound to fade.':'Hold the key briefly, then release it.','♪');
+        const prompt=calibration.notePrompts[index],groupIndex=index%7,handLabel=prompt.hand==='left'?'Left hand':'Right hand',previous=calibration.notePrompts[index-1];$('round').textContent=`${prompt.hand==='left'?'LH':'RH'} ${groupIndex+1}/7`;$('chordName').textContent=release?'Release':prompt.name;$('quality').textContent=release?`Let ${previous.name} ring out, then play ${prompt.name}.`:`${handLabel}: play and hold ${prompt.name} until the prompt advances.`;setStatus(release?'Release the note':`${handLabel} note`,release?'Wait for the sound to fade.':'Hold the key while it is sampled.','♪');
       }
       else{
-        const chord=calibration.chordPrompts[index],groupIndex=index%6,handLabel=chord.hand==='left'?'Left hand':'Right hand';$('round').textContent=`${chord.hand==='left'?'LH':'RH'} ${groupIndex+1}/6`;$('chordName').textContent=release?'Release':chord.name;$('quality').textContent=release?'Let every key ring out before the next prompt.':`${handLabel}: play and hold the highlighted keys together.`;setStatus(release?'Release the chord':`${handLabel} chord`,release?'Wait for the sound to fade.':'The prompt advances when sound is captured.','♪');
+        const chord=calibration.chordPrompts[index],groupIndex=index%6,handLabel=chord.hand==='left'?'Left hand':'Right hand';$('round').textContent=`${chord.hand==='left'?'LH':'RH'} ${groupIndex+1}/6`;$('chordName').textContent=release?'Release':chord.name;$('quality').textContent=release?'Let every key ring out before the next prompt.':`${handLabel}: play and hold the highlighted keys together until the prompt advances.`;setStatus(release?'Release the chord':`${handLabel} chord`,release?'Wait for the sound to fade.':'Hold the keys while they are sampled.','♪');
       }
     }
     else if(current&&!deckPaused){
@@ -294,15 +295,15 @@
           }
           else if(calibration.phase==='notes'){
             if(rms>signalGate){
-              if(!calibration.playFrames){
+              if(!calibration.playFrames){calibration.captureStartedAt=performance.now();
                 let strongest=36;for(let midi=37;midi<=84;midi++)if(saliences[midi]>saliences[strongest])strongest=midi;
                 if(saliences[strongest]>1e-12)$('connectionText').textContent=`Hearing ${noteName(strongest)} · capturing ${calibration.notePrompts[calibration.noteIndex].name}`;
                 setStatus('Sound detected',`Capturing ${calibration.notePrompts[calibration.noteIndex].name} · release when prompted.`,'◉');
               }
-              calibration.playSum+=rms;calibration.playFrames++;calibration.profileSamples.push(measureHarmonicProfile(power,binHz,expectedMidi));calibration.noteTuningSamples.push(estimateTuningCents(power,binHz,expectedMidi));if(calibration.playFrames>=8){
+              calibration.playSum+=rms;calibration.playFrames++;calibration.profileSamples.push(measureHarmonicProfile(power,binHz,expectedMidi));calibration.noteTuningSamples.push(estimateTuningCents(power,binHz,expectedMidi));if(calibration.playFrames>=calibrationMinCaptureFrames&&performance.now()-calibration.captureStartedAt>=calibrationMinCaptureMs){
                 const recognized=calibrationNoteDetected(saliences,expectedMidi);calibration.noteLevels.push(calibration.playSum/calibration.playFrames);calibration.releaseReference=calibration.playSum/calibration.playFrames;
                 if(recognized){calibration.noteProfiles[expectedMidi]=[0,1,2,3,4,5,6].map(i=>calibration.profileSamples.reduce((sum,profile)=>sum+profile[i],0)/calibration.profileSamples.length);calibration.tuningSamples.push(calibration.noteTuningSamples.sort((a,b)=>a-b)[Math.floor(calibration.noteTuningSamples.length/2)])}
-                calibration.profileSamples=[];calibration.noteTuningSamples=[];calibration.playSum=0;calibration.playFrames=0;calibration.noteIndex++;
+                calibration.profileSamples=[];calibration.noteTuningSamples=[];calibration.playSum=0;calibration.playFrames=0;calibration.captureStartedAt=0;calibration.noteIndex++;
                 if(calibration.noteIndex<calibration.notePrompts.length){
                   calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent=`Signal captured${recognized?' · pitch matched':' · pitch unclear, continuing'}; release, then play ${calibration.notePrompts[calibration.noteIndex].name}`;render();
                 }
@@ -319,13 +320,13 @@
                 }
               }
             }
-            else{calibration.playSum=0;calibration.playFrames=0;calibration.profileSamples=[]}
+            else{calibration.playSum=0;calibration.playFrames=0;calibration.captureStartedAt=0;calibration.profileSamples=[];calibration.noteTuningSamples=[]}
           }
           else if(calibration.phase==='chords'){
             const prompt=calibration.chordPrompts[calibration.chordIndex];if(rms>signalGate){
-              if(!calibration.playFrames)setStatus('Sound detected',`Capturing ${prompt.hand} hand · ${prompt.name}.`,'◉');
-              calibration.playSum+=rms;if(++calibration.playFrames>=8){
-                calibration.releaseReference=calibration.playSum/calibration.playFrames;calibration.playSum=0;calibration.chordIndex++;calibration.playFrames=0;if(calibration.chordIndex<calibration.chordPrompts.length){
+              if(!calibration.playFrames){calibration.captureStartedAt=performance.now();setStatus('Sound detected',`Capturing ${prompt.hand} hand · ${prompt.name}.`,'◉');}
+              calibration.playSum+=rms;if(++calibration.playFrames>=calibrationMinCaptureFrames&&performance.now()-calibration.captureStartedAt>=calibrationMinCaptureMs){
+                calibration.releaseReference=calibration.playSum/calibration.playFrames;calibration.playSum=0;calibration.chordIndex++;calibration.playFrames=0;calibration.captureStartedAt=0;if(calibration.chordIndex<calibration.chordPrompts.length){
                   calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent='Sound captured; release, then play '+calibration.chordPrompts[calibration.chordIndex].name;render()
                 }
                 else{
@@ -333,7 +334,7 @@
                 }
               }
             }
-            else calibration.playFrames=0
+            else{calibration.playFrames=0;calibration.captureStartedAt=0}
           }
           else{
             calibration.playSum=0;calibration.playFrames=0;calibration.profileSamples=[]
