@@ -53,6 +53,13 @@ body:before {
   font:700 15px var(--display);
   letter-spacing:-.4px
 }
+.version {
+  margin-left: 5px;
+  color: var(--muted);
+  font: 10px var(--mono);
+  letter-spacing: 0;
+  vertical-align: 1px;
+}
 .back {
   color:var(--muted);
   font:11px var(--mono);
