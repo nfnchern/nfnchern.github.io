@@ -99,7 +99,6 @@
   let chordTargetFloor=Math.min(.22,Math.max(.08,storedNumber('chord-garden-chord-target-floor',.14)));
   let chordExtraFloor=Math.min(.4,Math.max(.24,storedNumber('chord-garden-chord-extra-floor',.3)));
   let calibration=null;
-  let calibrationGuideInterval=0;
   let deckMode=storage.get('chord-garden-deck-mode')==='random'?'random':'walk';
   let progressionGraphModel=null;
   let currentProgressionIndex=null;
@@ -142,8 +141,8 @@
     const fundamental=nearbyPowerAt(power,noteFrequency(midi),binHz);return[2,3,4,5].map(h=>Math.max(.001,Math.min(.9,nearbyPowerAt(power,noteFrequency(midi)*h,binHz)/Math.max(fundamental,1e-12))))
   }
   function renderKeyboard(){
-    const board=$('keyboard');board.innerHTML='';if(!current||deckPaused)return;const target=current.q.ints.map(i=>(current.root+i)%12),leftNotes=current.q.ints.map(i=>48+current.root+i),rightNotes=current.q.ints.map(i=>60+current.root+i),reveal=solved||guided;let whiteIndex=-1;for(let midi=48;midi<84;midi++){
-      const pc=midi%12,isTarget=target.includes(pc),isLeft=leftNotes.includes(midi),isRight=rightNotes.includes(midi),showGuide=guided&&(isLeft||isRight),hand=isLeft?'left':'right',targetClass=reveal&&showGuide?' target hand-'+hand:'';if(whitePitchClasses.includes(pc)){
+    const board=$('keyboard');board.innerHTML='';if((!current||deckPaused)&&!calibration)return;const target=current?current.q.ints.map(i=>(current.root+i)%12):[],leftNotes=current?current.q.ints.map(i=>48+current.root+i):[],rightNotes=current?current.q.ints.map(i=>60+current.root+i):[],reveal=solved||guided,calibrationTargets=calibration&&!calibration.awaitingRelease?(calibration.phase==='notes'?[60+notes.indexOf(calibration.noteNames[calibration.noteIndex])]:calibration.phase==='chords'?(calibration.chordPrompts[calibration.chordIndex]?.midis||[]):[]):[];let whiteIndex=-1;for(let midi=48;midi<84;midi++){
+      const pc=midi%12,isCalibrationTarget=calibrationTargets.includes(midi),isTarget=calibration?isCalibrationTarget:target.includes(pc),isLeft=leftNotes.includes(midi),isRight=rightNotes.includes(midi),showGuide=!calibration&&guided&&(isLeft||isRight),hand=isLeft?'left':'right',targetClass=calibration?(isCalibrationTarget?' target calibration-target':''):reveal&&showGuide?' target hand-'+hand:'';if(whitePitchClasses.includes(pc)){
         whiteIndex++;const key=document.createElement('div');key.className='key'+targetClass+(registeredNotes.has(midi)?' registered':'');key.dataset.midi=midi;key.title=noteName(midi);key.setAttribute('aria-label',noteName(midi)+(isTarget?', chord note':''));const label=document.createElement('span');label.className='keylabel';label.textContent=pc===0?noteName(midi):notes[pc];key.appendChild(label);if(showGuide){
           const marker=document.createElement('span');marker.className='key-guide guide-'+hand;marker.textContent=noteName(midi);key.appendChild(marker)
         }board.appendChild(key)
@@ -159,11 +158,25 @@
     if(next.size===registeredNotes.size&&[...next].every(n=>registeredNotes.has(n)))return;registeredNotes=next;document.querySelectorAll('#keyboard [data-midi]').forEach(key=>key.classList.toggle('registered',registeredNotes.has(Number(key.dataset.midi))))
   }
   function render(){
-    if(current&&!deckPaused){
+    if(calibration){
+      const phase=calibration.phase,index=phase==='chords'?calibration.chordIndex:calibration.noteIndex||0,release=calibration.awaitingRelease;
+      $('cardLabel').textContent='Calibrate';
+      if(phase==='noise'){
+        $('round').textContent='QUIET';$('chordName').textContent='Stay quiet';$('quality').textContent='Measuring the room for two seconds.';setStatus('Room check','Keep quiet until the note prompts begin.','◉');
+      }
+      else if(phase==='notes'){
+        const note=calibration.noteNames[index]+'4';$('round').textContent=`${index+1}/7`;$('chordName').textContent=release?'Release':note;$('quality').textContent=release?`Let ${calibration.noteNames[Math.max(0,index-1)]}4 ring out, then play ${note}.`:`Play and hold ${note}. The prompt advances when sound is captured.`;setStatus(release?'Release the note':'Play this note',release?'Wait for the sound to fade.':'Hold the key briefly, then release it.','♪');
+      }
+      else{
+        const chord=calibration.chordPrompts[index];$('round').textContent=`${index+1}/3`;$('chordName').textContent=release?'Release':chord.name;$('quality').textContent=release?'Let every key ring out before the next prompt.':'Play and hold the highlighted keys together.';setStatus(release?'Release the chord':'Play this chord',release?'Wait for the sound to fade.':'The prompt advances when sound is captured.','♪');
+      }
+    }
+    else if(current&&!deckPaused){
+      $('cardLabel').textContent='Chord';
       const root=notes[current.root],q=current.q,quality=document.createElement('span');quality.textContent=q.name;$('chordName').replaceChildren(document.createTextNode(root),quality);$('quality').textContent=`${root} ${q.label} · root position`;$('round').textContent=String(done+1).padStart(2,'0')
     }
     else{
-      $('chordName').textContent='—';$('quality').textContent='Choose a learning level to begin';$('round').textContent='--'
+      $('cardLabel').textContent='Chord';$('chordName').textContent='—';$('quality').textContent='Choose a learning level to begin';$('round').textContent='--'
     }renderKeyboard()
   }
   function chordId(chord){
@@ -206,29 +219,13 @@
   function toast(message){
     $('toast').textContent=message;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3200)
   }
-  function updateCalibrationGuide(phase,index=0){
-    const dialog=$('calibrationGuide'),wasHidden=dialog.classList.contains('hidden'),release=calibration?.awaitingRelease,chordPhase=phase==='chords',step=phase==='noise'?'noise':(chordPhase?'chord-':'note-')+index+(release?'-release':'');if(!wasHidden&&dialog.dataset.step===step)return;dialog.classList.remove('hidden');dialog.dataset.step=step;$('skipChordCalibration').classList.toggle('hidden',!chordPhase);const notes=[...document.querySelectorAll('.calibration-note')],chord=chordPhase?calibration.chordPrompts[index]:null,pcs=chord?.pcs||[];notes.forEach((el,i)=>{
-      const active=phase==='notes'&&!release&&i===index,chordKey=chordPhase&&!release&&pcs.includes(Number(el.dataset.pc));el.classList.toggle('active',active);el.classList.toggle('chord-key',chordKey);if(active||chordKey)el.setAttribute('aria-current','step');else el.removeAttribute('aria-current')
-    });document.querySelectorAll('.guide-white').forEach(key=>key.classList.toggle('active',chordPhase?!release&&pcs.includes(Number(key.dataset.pc)):phase==='notes'&&!release&&key.dataset.note===notes[index]?.dataset.note));if(phase==='noise'){
-      $('calibrationTitle').textContent='First, stay quiet';$('calibrationCopy').textContent='Keep the room quiet for two seconds while chordz measures background noise.'
-    }
-    else if(chordPhase){
-      $('calibrationTitle').textContent=release?'Release the chord':'Play '+chord.name;$('calibrationCopy').textContent=release?'Let every key ring out, then wait for the next chord.':'Play and hold all the highlighted keys together until the microphone recognizes the chord.'
-    }
-    else{
-      $('calibrationTitle').textContent=release?'Release the previous note':'Play '+notes[index].textContent;$('calibrationCopy').textContent=release?'Wait for the previous note to stop, then play the next note.':'Play and hold the highlighted white key until the microphone recognizes this pitch.'
-    }if(wasHidden)$('cancelCalibration').focus()
-  }
-  function hideCalibrationGuide(){
-    clearInterval(calibrationGuideInterval);calibrationGuideInterval=0;$('calibrationGuide').classList.add('hidden');delete $('calibrationGuide').dataset.step
-  }
   function stopMic(){
-    if(raf)cancelAnimationFrame(raf);raf=0;calibration=null;hideCalibrationGuide();$('calibrateBtn').disabled=true;$('calibrateBtn').textContent='Calibrate';if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;analyser=null;if(audioCtx){
+    if(raf)cancelAnimationFrame(raf);raf=0;calibration=null;$('calibrateBtn').disabled=true;$('calibrateBtn').textContent='Calibrate';if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;analyser=null;if(audioCtx){
       audioCtx.close().catch(()=>{
         
       });audioCtx=null
     }
-    $('volume').classList.add('hidden')
+    $('volume').classList.add('hidden');if($('cardLabel'))render()
   }
   function beginCalibration(){
     if(!analyser||calibration)return;calibration={
@@ -239,9 +236,7 @@
       },{
         name:'G7',midis:[67,71,74,77],pcs:[7,11,2,5]
       }],chordIndex:0,chordFrames:0,chordTargetRatios:[],chordExtraRatios:[]
-    };goodSince=0;$('calibrateBtn').disabled=true;$('calibrateBtn').textContent='Stay quiet · measuring';$('connectionText').textContent='First, stay quiet for two seconds';updateCalibrationGuide('noise');calibrationGuideInterval=setInterval(()=>{
-      if(calibration)updateCalibrationGuide(calibration.phase,calibration.phase==='chords'?calibration.chordIndex:(calibration.noteIndex||0));else hideCalibrationGuide()
-    },80)
+    };goodSince=0;registeredNotes.clear();$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Cancel calibration';$('connectionText').textContent='Calibration started';render()
   }
   async function startMic(){
     stopMic();$('connectBtn').textContent='Requesting microphone…';if(!navigator.mediaDevices?.getUserMedia){
@@ -272,53 +267,52 @@
       const rms=Math.sqrt(energy/samples.length);$('volumeBar').style.width=Math.min(100,rms*500)+'%';if(calibration){
         if(calibration.phase==='noise'){
           calibration.noiseSamples.push(rms);if(performance.now()>=calibration.until){
-            const levels=calibration.noiseSamples.sort((a,b)=>a-b);noiseFloor=Math.min(.04,Math.max(.0005,levels[Math.floor((levels.length-1)*.5)]||0));noisePeak=Math.min(.04,Math.max(noiseFloor,levels[Math.floor((levels.length-1)*.9)]||noiseFloor));storage.set('chord-garden-noise-floor',String(noiseFloor));storage.set('chord-garden-noise-peak',String(noisePeak));calibration.phase='notes';calibration.noteIndex=0;calibration.until=Infinity;calibration.noteLevels=[];calibration.playSum=0;calibration.playFrames=0;calibration.awaitingRelease=false;$('calibrateBtn').textContent='Play C4';$('connectionText').textContent='Play and hold C4 until the signal and pitch are detected';
+            const levels=calibration.noiseSamples.sort((a,b)=>a-b);noiseFloor=Math.min(.04,Math.max(.0005,levels[Math.floor((levels.length-1)*.5)]||0));noisePeak=Math.min(.04,Math.max(noiseFloor,levels[Math.floor((levels.length-1)*.9)]||noiseFloor));storage.set('chord-garden-noise-floor',String(noiseFloor));storage.set('chord-garden-noise-peak',String(noisePeak));calibration.phase='notes';calibration.noteIndex=0;calibration.until=Infinity;calibration.noteLevels=[];calibration.playSum=0;calibration.playFrames=0;calibration.awaitingRelease=false;$('calibrateBtn').textContent='Cancel calibration';$('connectionText').textContent='Play C4';render();
           }
         }
         else{
           const signalGate=Math.min(.02,Math.max(.002,noiseFloor*1.25,noisePeak*.9,noiseFloor+.001)),releaseGate=Math.max(.002,noiseFloor*1.2,noisePeak*.95),expectedMidi=calibration.phase==='notes'?60+notes.indexOf(calibration.noteNames[calibration.noteIndex]):0;readPowerSpectrum(analyser,decibels,power);const saliences=pitchSaliences(power,binHz);if(calibration.awaitingRelease){
             const adaptiveReleaseGate=Math.max(noiseFloor*1.25,noisePeak*1.1,(calibration.releaseReference||releaseGate)*.2);if(rms<adaptiveReleaseGate){
               calibration.releaseFrames=(calibration.releaseFrames||0)+1;if(calibration.releaseFrames>=6){
-                calibration.awaitingRelease=false;calibration.releaseFrames=0;calibration.playSum=0;calibration.playFrames=0;$('connectionText').textContent=calibration.phase==='notes'?'Play '+calibration.noteNames[calibration.noteIndex]+'4':'Play '+calibration.chordPrompts[calibration.chordIndex].name;$('calibrateBtn').textContent=calibration.phase==='notes'?'Play '+calibration.noteNames[calibration.noteIndex]+'4':'Play '+calibration.chordPrompts[calibration.chordIndex].name
+                calibration.awaitingRelease=false;calibration.releaseFrames=0;calibration.playSum=0;calibration.playFrames=0;$('connectionText').textContent=calibration.phase==='notes'?'Play '+calibration.noteNames[calibration.noteIndex]+'4':'Play '+calibration.chordPrompts[calibration.chordIndex].name;render()
               }
             }
             else calibration.releaseFrames=0;
           }
-          else if(calibration.phase==='notes'&&rms>signalGate&&calibrationNoteDetected(saliences,expectedMidi)){
-            calibration.playSum+=rms;calibration.playFrames++;calibration.profileSamples.push(measureHarmonicProfile(power,binHz,expectedMidi));if(calibration.playFrames>=8){
-              calibration.noteLevels??=[];calibration.releaseReference=calibration.playSum/calibration.playFrames;calibration.noteLevels.push(calibration.releaseReference);calibration.noteProfiles.push([0,1,2,3].map(i=>calibration.profileSamples.reduce((sum,profile)=>sum+profile[i],0)/calibration.profileSamples.length));calibration.profileSamples=[];calibration.noteIndex++;if(calibration.noteIndex<calibration.noteNames.length){
-                calibration.awaitingRelease=true;calibration.releaseFrames=0;$('calibrateBtn').textContent='Release, then play '+calibration.noteNames[calibration.noteIndex]+'4';$('connectionText').textContent='Release the previous note, then play '+calibration.noteNames[calibration.noteIndex]+'4'
+          else if(calibration.phase==='notes'){
+            if(rms>signalGate){
+              if(!calibration.playFrames){
+                let strongest=45;for(let midi=46;midi<=84;midi++)if(saliences[midi]>saliences[strongest])strongest=midi;
+                if(saliences[strongest]>1e-12)$('connectionText').textContent=`Hearing ${noteName(strongest)} · capturing ${calibration.noteNames[calibration.noteIndex]}4`;
               }
-              else{
-                const levels=calibration.noteLevels.sort((a,b)=>a-b),measured=levels[Math.floor(levels.length/2)];playingLevel=Math.min(.2,measured);storage.set('chord-garden-playing-level',String(playingLevel));harmonicProfile=[0,1,2,3].map(i=>{
-                  const values=calibration.noteProfiles.map(profile=>profile[i]).sort((a,b)=>a-b);return Math.max(.001,Math.min(.9,values[Math.floor(values.length/2)]||[.12,.05,.025,.015][i]))
-                });storage.set('chord-garden-harmonic-profile',JSON.stringify(harmonicProfile));calibration.phase='chords';calibration.chordIndex=0;calibration.awaitingRelease=true;calibration.releaseFrames=0;calibration.playFrames=0;calibration.playSum=0;$('connectionText').textContent='Release B4, then play C major';$('calibrateBtn').textContent='Release, then play C major'
-              }
-            }
-          }
-          else if(calibration.phase==='notes'&&rms>signalGate){
-            let strongest=45;for(let midi=46;midi<=84;midi++)if(saliences[midi]>saliences[strongest])strongest=midi;
-            const now=performance.now();if(saliences[strongest]>1e-12&&now-(calibration.lastPitchHint||0)>500){
-              calibration.lastPitchHint=now;$('connectionText').textContent=`Hearing ${noteName(strongest)} · waiting for ${calibration.noteNames[calibration.noteIndex]}4`;
-            }
-            calibration.playSum=0;calibration.playFrames=0;calibration.profileSamples=[]
-          }
-          else if(calibration.phase==='chords'){
-            const prompt=calibration.chordPrompts[calibration.chordIndex],metrics=calibrationChordMetrics(saliences,prompt.pcs),detected=rms>signalGate&&metrics.targetRatio>.08;if(calibration.awaitingRelease){
-              if(rms<releaseGate){
-                calibration.releaseFrames=(calibration.releaseFrames||0)+1;if(calibration.releaseFrames>=6){
-                  calibration.awaitingRelease=false;calibration.releaseFrames=0;calibration.playFrames=0;calibration.playSum=0;$('connectionText').textContent='Play '+prompt.name;$('calibrateBtn').textContent='Play '+prompt.name
-                }
-              }
-              else calibration.releaseFrames=0
-            }
-            else if(detected&&metrics.targetRatio>.08){
-              calibration.playSum+=rms;calibration.chordTargetRatios.push(metrics.targetRatio);calibration.chordExtraRatios.push(metrics.extraRatio);if(++calibration.playFrames>=8){
-                calibration.releaseReference=calibration.playSum/calibration.playFrames;calibration.playSum=0;calibration.chordIndex++;calibration.playFrames=0;if(calibration.chordIndex<calibration.chordPrompts.length){
-                  calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent='Release the chord, then play '+calibration.chordPrompts[calibration.chordIndex].name;$('calibrateBtn').textContent='Release, then play '+calibration.chordPrompts[calibration.chordIndex].name
+              calibration.playSum+=rms;calibration.playFrames++;calibration.profileSamples.push(measureHarmonicProfile(power,binHz,expectedMidi));if(calibration.playFrames>=8){
+                const recognized=calibrationNoteDetected(saliences,expectedMidi);calibration.noteLevels.push(calibration.playSum/calibration.playFrames);calibration.releaseReference=calibration.playSum/calibration.playFrames;
+                if(recognized)calibration.noteProfiles.push([0,1,2,3].map(i=>calibration.profileSamples.reduce((sum,profile)=>sum+profile[i],0)/calibration.profileSamples.length));
+                calibration.profileSamples=[];calibration.playSum=0;calibration.playFrames=0;calibration.noteIndex++;
+                if(calibration.noteIndex<calibration.noteNames.length){
+                  calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent=`Signal captured${recognized?' · pitch matched':' · pitch unclear, continuing'}; release, then play ${calibration.noteNames[calibration.noteIndex]}4`;render();
                 }
                 else{
-                  const sortedTarget=calibration.chordTargetRatios.slice().sort((a,b)=>a-b),sortedExtra=calibration.chordExtraRatios.slice().sort((a,b)=>a-b);chordTargetFloor=Math.max(.08,Math.min(.22,sortedTarget[Math.floor(sortedTarget.length*.2)]*.7));chordExtraFloor=Math.max(.24,Math.min(.4,(sortedExtra[Math.floor(sortedExtra.length*.8)]||.2)*1.25));storage.set('chord-garden-chord-target-floor',String(chordTargetFloor));storage.set('chord-garden-chord-extra-floor',String(chordExtraFloor));$('connectionText').textContent='Listening · note and chord calibration complete';calibration=null;hideCalibrationGuide();$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate'
+                  const levels=calibration.noteLevels.sort((a,b)=>a-b),measured=levels[Math.floor(levels.length/2)];playingLevel=Math.min(.2,measured);storage.set('chord-garden-playing-level',String(playingLevel));
+                  if(calibration.noteProfiles.length)harmonicProfile=[0,1,2,3].map(i=>{
+                    const values=calibration.noteProfiles.map(profile=>profile[i]).sort((a,b)=>a-b);return Math.max(.001,Math.min(.9,values[Math.floor(values.length/2)]||[.12,.05,.025,.015][i]))
+                  });
+                  storage.set('chord-garden-harmonic-profile',JSON.stringify(harmonicProfile));calibration.phase='chords';calibration.chordIndex=0;calibration.awaitingRelease=true;calibration.releaseFrames=0;calibration.playFrames=0;calibration.playSum=0;$('connectionText').textContent='Signal captured; release B4, then play C major.';render()
+                }
+              }
+            }
+            else{calibration.playSum=0;calibration.playFrames=0;calibration.profileSamples=[]}
+          }
+          else if(calibration.phase==='chords'){
+            const prompt=calibration.chordPrompts[calibration.chordIndex],metrics=calibrationChordMetrics(saliences,prompt.pcs);if(rms>signalGate){
+              calibration.playSum+=rms;if(metrics.targetRatio>.08){calibration.chordTargetRatios.push(metrics.targetRatio);calibration.chordExtraRatios.push(metrics.extraRatio)}if(++calibration.playFrames>=8){
+                calibration.releaseReference=calibration.playSum/calibration.playFrames;calibration.playSum=0;calibration.chordIndex++;calibration.playFrames=0;if(calibration.chordIndex<calibration.chordPrompts.length){
+                  calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent='Sound captured; release, then play '+calibration.chordPrompts[calibration.chordIndex].name;render()
+                }
+                else{
+                  const sortedTarget=calibration.chordTargetRatios.slice().sort((a,b)=>a-b),sortedExtra=calibration.chordExtraRatios.slice().sort((a,b)=>a-b);if(sortedTarget.length){
+                    chordTargetFloor=Math.max(.08,Math.min(.22,sortedTarget[Math.floor(sortedTarget.length*.2)]*.7));chordExtraFloor=Math.max(.24,Math.min(.4,(sortedExtra[Math.floor(sortedExtra.length*.8)]||.2)*1.25));storage.set('chord-garden-chord-target-floor',String(chordTargetFloor));storage.set('chord-garden-chord-extra-floor',String(chordExtraFloor))
+                  }$('connectionText').textContent='Listening · calibration complete';calibration=null;$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate';render();setStatus('Calibration complete','Play the chord shown to continue.','✓');
                 }
               }
             }
@@ -424,10 +418,8 @@
       stopMic();updateRegistered(new Set());$('connDot').classList.remove('live');$('connectionText').textContent='Microphone stopped';$('connectBtn').textContent='◉  Start listening'
     }
     else startMic()
-  };$('calibrateBtn').onclick=beginCalibration;$('cancelCalibration').onclick=()=>{
-    calibration=null;hideCalibrationGuide();$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate';$('connectionText').textContent='Calibration cancelled'
-  };$('skipChordCalibration').onclick=()=>{
-    if(calibration?.phase!=='chords')return;calibration=null;hideCalibrationGuide();$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate';$('connectionText').textContent='Listening · note calibration complete'
+  };$('calibrateBtn').onclick=()=>{
+    if(!calibration)beginCalibration();else{calibration=null;$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate';$('connectionText').textContent='Calibration cancelled';render();setStatus('Calibration cancelled','The current chord is ready for practice.','♪')}
   };$('doneCount').textContent=done;if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{
     
   }));pick();

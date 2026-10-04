@@ -13,14 +13,14 @@
 </head>
 <body>
   <div class="site">
-    <header class="topbar"><div class="identity">chordz <span class="version">v33</span></div><a class="back" href="../">← HOME</a></header>
+    <header class="topbar"><div class="identity">chordz <span class="version">v34</span></div><a class="back" href="../">← HOME</a></header>
     <main>
       <section aria-label="Piano chord practice">
         <div class="trainer">
           <div class="intro"><p class="eyebrow">A little daily practice</p><h1 class="title">Play what you see.</h1><p class="subtitle">One chord at a time. Play it on your piano to move to the next card.</p></div>
           <div class="columns">
             <article class="card">
-              <div class="cardtop"><span>Chord <span id="round">01</span></span><div class="cardtop-right"><button class="deck-mode" id="deckModeBtn" type="button" aria-pressed="true">Progression walk</button><span class="count">♪ &nbsp;<span id="doneCount">0</span> played</span></div></div>
+              <div class="cardtop"><span><span id="cardLabel">Chord</span> <span id="round">01</span></span><div class="cardtop-right"><button class="deck-mode" id="deckModeBtn" type="button" aria-pressed="true">Progression walk</button><span class="count">♪ &nbsp;<span id="doneCount">0</span> played</span></div></div>
               <div class="prompt"><div class="chord" id="chordName">C<span>maj</span></div><div class="quality" id="quality">C major triad · root position</div></div>
               <div class="keyboard-wrap"><div class="keyboard" id="keyboard" role="img" aria-label="Piano keyboard from C3 to B5, including left-hand and right-hand chord hints"></div><div class="keyfoot"><span>LOW</span><span>Blue = left · Lime = right · Coral = heard pitch class (octave uncertain)</span><span>HIGH</span></div></div>
               <div class="response" id="response"><div class="status-icon" id="statusIcon">♪</div><div class="status-copy"><div class="status-title" id="statusTitle">Ready when you are</div><div class="status-detail" id="statusDetail">Play all the notes together to continue.</div></div></div>
@@ -45,9 +45,6 @@
     </main>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <div class="calibration-overlay hidden" id="calibrationGuide" role="dialog" aria-modal="true" aria-labelledby="calibrationTitle" aria-describedby="calibrationCopy">
-    <section class="calibration-card"><p class="calibration-eyebrow">Microphone calibration</p><h2 class="calibration-title" id="calibrationTitle">Prepare to calibrate</h2><p class="calibration-copy" id="calibrationCopy">Follow the prompts to measure room noise and playing level.</p><div class="guide-piano" role="img" aria-label="Piano keyboard from C4 to B4; the prompted note is highlighted"><div class="guide-white" data-guide-note="C" data-pc="0"><span>C4</span></div><div class="guide-white" data-guide-note="D" data-pc="2"><span>D4</span></div><div class="guide-white" data-guide-note="E" data-pc="4"><span>E4</span></div><div class="guide-white" data-guide-note="F" data-pc="5"><span>F4</span></div><div class="guide-white" data-guide-note="G" data-pc="7"><span>G4</span></div><div class="guide-white" data-guide-note="A" data-pc="9"><span>A4</span></div><div class="guide-white" data-guide-note="B" data-pc="11"><span>B4</span></div><i class="guide-black" style="left:14.2857%"></i><i class="guide-black" style="left:28.5714%"></i><i class="guide-black" style="left:57.1429%"></i><i class="guide-black" style="left:71.4286%"></i><i class="guide-black" style="left:85.7143%"></i></div><div class="calibration-notes" id="calibrationNotes" aria-label="Calibration note sequence"><span class="calibration-note" data-note="C" data-pc="0">C4</span><span class="calibration-note" data-note="D" data-pc="2">D4</span><span class="calibration-note" data-note="E" data-pc="4">E4</span><span class="calibration-note" data-note="F" data-pc="5">F4</span><span class="calibration-note" data-note="G" data-pc="7">G4</span><span class="calibration-note" data-note="A" data-pc="9">A4</span><span class="calibration-note" data-note="B" data-pc="11">B4</span></div><div class="calibration-actions"><button class="calibration-cancel" id="cancelCalibration" type="button">Cancel</button><button class="calibration-skip hidden" id="skipChordCalibration" type="button">Skip chord check</button></div></section>
-  </div>
   <script src="progressions.js"></script>
   <script src="progression-graph.js"></script>
   <script src="app.js"></script>
