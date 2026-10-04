@@ -131,7 +131,7 @@
     const salience=new Float32Array(85);for(let midi=45;midi<=84;midi++)salience[midi]=noteSalience(power,binHz,midi);return salience
   }
   function calibrationNoteDetected(saliences,midi){
-    let peak=0;for(let n=45;n<=84;n++)peak=Math.max(peak,saliences[n]);return saliences[midi]>=Math.max(peak*.24,1e-12)
+    let peak=0;for(let n=45;n<=84;n++)peak=Math.max(peak,saliences[n]);return saliences[midi]>=Math.max(peak*.18,1e-12)
   }
   function calibrationChordMetrics(saliences,pcs){
     const score=new Float32Array(12);for(let n=45;n<=84;n++)score[n%12]=Math.max(score[n%12],saliences[n]);const peak=Math.max(...score),weakest=Math.min(...pcs.map(pc=>score[pc])),extra=Math.max(0,...Array.from(score,(value,pc)=>pcs.includes(pc)?0:value));return{
@@ -276,8 +276,8 @@
           }
         }
         else{
-          const signalGate=Math.min(.035,Math.max(.003,noiseFloor*1.5,noisePeak*1.05,noiseFloor+.002)),releaseGate=Math.max(.002,noiseFloor*1.2,noisePeak*.9),expectedMidi=calibration.phase==='notes'?60+notes.indexOf(calibration.noteNames[calibration.noteIndex]):0;readPowerSpectrum(analyser,decibels,power);const saliences=pitchSaliences(power,binHz);if(calibration.awaitingRelease){
-            const adaptiveReleaseGate=Math.max(noiseFloor*1.2,(calibration.releaseReference||releaseGate)*.18);if(rms<adaptiveReleaseGate){
+          const signalGate=Math.min(.02,Math.max(.002,noiseFloor*1.25,noisePeak*.9,noiseFloor+.001)),releaseGate=Math.max(.002,noiseFloor*1.2,noisePeak*.95),expectedMidi=calibration.phase==='notes'?60+notes.indexOf(calibration.noteNames[calibration.noteIndex]):0;readPowerSpectrum(analyser,decibels,power);const saliences=pitchSaliences(power,binHz);if(calibration.awaitingRelease){
+            const adaptiveReleaseGate=Math.max(noiseFloor*1.25,noisePeak*1.1,(calibration.releaseReference||releaseGate)*.2);if(rms<adaptiveReleaseGate){
               calibration.releaseFrames=(calibration.releaseFrames||0)+1;if(calibration.releaseFrames>=6){
                 calibration.awaitingRelease=false;calibration.releaseFrames=0;calibration.playSum=0;calibration.playFrames=0;$('connectionText').textContent=calibration.phase==='notes'?'Play '+calibration.noteNames[calibration.noteIndex]+'4':'Play '+calibration.chordPrompts[calibration.chordIndex].name;$('calibrateBtn').textContent=calibration.phase==='notes'?'Play '+calibration.noteNames[calibration.noteIndex]+'4':'Play '+calibration.chordPrompts[calibration.chordIndex].name
               }
