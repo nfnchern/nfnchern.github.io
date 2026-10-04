@@ -26,11 +26,14 @@
 
   function buildGraph(labels) {
     const progressions = labels.map(parseProgression);
-    const edges = [];
+    const edges = [], outgoing = progressions.map(() => []);
     progressions.forEach((source, from) => progressions.forEach((target, to) => {
-      if (source.end && source.end === target.start) edges.push({from, to});
+      if (source.end && source.end === target.start) {
+        edges.push({from, to});
+        outgoing[from].push(to);
+      }
     }));
-    return {progressions, edges, outgoing:progressions.map((_, from) => edges.filter(edge => edge.from === from).map(edge => edge.to))};
+    return {progressions, edges, outgoing};
   }
 
   function isStronglyConnected(graph) {
