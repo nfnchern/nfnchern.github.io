@@ -96,8 +96,13 @@
       return Array.isArray(saved)&&saved.length===4?saved.map((value,index)=>Number.isFinite(value)?Math.max(.001,Math.min(.9,value)):[.12,.05,.025,.015][index]):[.12,.05,.025,.015];
     }catch{return [.12,.05,.025,.015];}
   })();
-  let chordTargetFloor=Math.min(.12,Math.max(.04,storedNumber('chord-garden-chord-target-floor',.06)));
-  let chordExtraFloor=Math.min(.4,Math.max(.24,storedNumber('chord-garden-chord-extra-floor',.3)));
+  let noteTemplates=(()=>{
+    try{
+      const saved=JSON.parse(storage.get('chord-garden-note-templates')||'{}');
+      return saved&&typeof saved==='object'&&!Array.isArray(saved)?saved:{}
+    }catch{return {};}
+  })();
+  let tuningCents=Math.max(-50,Math.min(50,storedNumber('chord-garden-tuning-cents',0)));
   let calibration=null;
   let deckMode=storage.get('chord-garden-deck-mode')==='random'?'random':'walk';
   let progressionGraphModel=null;
@@ -116,29 +121,39 @@
     const bin=hz/binHz,lo=Math.floor(bin),fraction=bin-lo;if(lo<0||lo+1>=power.length)return 0;return power[lo]*(1-fraction)+power[lo+1]*fraction
   }
   function nearbyPowerAt(power,hz,binHz){
-    let peak=0;for(const cents of[-40,-20,0,20,40])peak=Math.max(peak,powerAt(power,hz*Math.pow(2,cents/1200),binHz));return peak
+    let peak=0;for(const cents of[-60,-40,-20,0,20,40,60])peak=Math.max(peak,powerAt(power,hz*Math.pow(2,cents/1200),binHz));return peak
   }
   function noteFrequency(midi){
-    return 440*Math.pow(2,(midi-69)/12)
+    return 440*Math.pow(2,(midi-69+tuningCents/100)/12)
+  }
+  function estimateTuningCents(power,binHz,midi){
+    const expected=440*Math.pow(2,(midi-69)/12),lo=Math.max(1,Math.floor(expected*Math.pow(2,-60/1200)/binHz)),hi=Math.min(power.length-2,Math.ceil(expected*Math.pow(2,60/1200)/binHz));let peak=lo;
+    for(let bin=lo+1;bin<=hi;bin++)if(power[bin]>power[peak])peak=bin;
+    const left=Math.log(Math.max(power[peak-1],1e-20)),center=Math.log(Math.max(power[peak],1e-20)),right=Math.log(Math.max(power[peak+1],1e-20)),denominator=left-2*center+right,shift=denominator?Math.max(-.5,Math.min(.5,.5*(left-right)/denominator)):0,frequency=(peak+shift)*binHz;
+    return 1200*Math.log2(frequency/expected)
   }
   function noteSalience(power,binHz,midi){
-    const frequency=noteFrequency(midi),fundamental=nearbyPowerAt(power,frequency,binHz);let predicted=0;for(let h=2;h<=5;h++){
-      const subharmonic=nearbyPowerAt(power,frequency/h,binHz),ratio=harmonicProfile[h-2]||0;predicted=Math.max(predicted,subharmonic*ratio)
-    }return Math.max(fundamental*.25,fundamental-predicted*.25)
+    const frequency=noteFrequency(midi),fundamental=nearbyPowerAt(power,frequency,binHz),template=noteTemplateFor(midi);let numerator=fundamental,denominator=1;
+    for(let h=2;h<=8;h++){
+      const ratio=template[h-2]||harmonicProfile[Math.min(h-2,harmonicProfile.length-1)]||.01,weight=Math.max(.001,Math.min(.9,ratio)),partial=nearbyPowerAt(power,frequency*h,binHz);
+      numerator+=weight*partial;denominator+=weight*weight
+    }
+    let predicted=0;for(let h=2;h<=5;h++)predicted=Math.max(predicted,nearbyPowerAt(power,frequency/h,binHz)*(harmonicProfile[h-2]||0));
+    return Math.max(fundamental*.15,(numerator/denominator)-predicted*.12)
+  }
+  function noteTemplateFor(midi){
+    const exact=noteTemplates[midi];if(Array.isArray(exact))return exact;
+    const samePitch=Object.keys(noteTemplates).map(Number).filter(note=>note%12===midi%12&&Array.isArray(noteTemplates[note])).sort((a,b)=>Math.abs(a-midi)-Math.abs(b-midi));
+    return samePitch.length?noteTemplates[samePitch[0]]:harmonicProfile
   }
   function pitchSaliences(power,binHz){
     const salience=new Float32Array(85);for(let midi=36;midi<=84;midi++)salience[midi]=noteSalience(power,binHz,midi);return salience
   }
   function calibrationNoteDetected(saliences,midi){
-    let peak=0;for(let n=36;n<=84;n++)peak=Math.max(peak,saliences[n]);return saliences[midi]>=Math.max(peak*.18,1e-12)
-  }
-  function calibrationChordMetrics(saliences,pcs){
-    const score=new Float32Array(12);for(let n=36;n<=84;n++)score[n%12]=Math.max(score[n%12],saliences[n]);const peak=Math.max(...score),weakest=Math.min(...pcs.map(pc=>score[pc])),extra=Math.max(0,...Array.from(score,(value,pc)=>pcs.includes(pc)?0:value));return{
-      targetRatio:peak?weakest/peak:0,extraRatio:peak?extra/peak:0
-    }
+    let peak=0;for(let n=36;n<=84;n++)peak=Math.max(peak,saliences[n]);return saliences[midi]>=Math.max(peak*.32,1e-12)
   }
   function measureHarmonicProfile(power,binHz,midi){
-    const fundamental=nearbyPowerAt(power,noteFrequency(midi),binHz);return[2,3,4,5].map(h=>Math.max(.001,Math.min(.9,nearbyPowerAt(power,noteFrequency(midi)*h,binHz)/Math.max(fundamental,1e-12))))
+    const fundamental=nearbyPowerAt(power,noteFrequency(midi),binHz);return[2,3,4,5,6,7,8].map(h=>Math.max(.001,Math.min(.9,nearbyPowerAt(power,noteFrequency(midi)*h,binHz)/Math.max(fundamental,1e-12))))
   }
   function renderKeyboard(){
     const board=$('keyboard');board.innerHTML='';if((!current||deckPaused)&&!calibration)return;const target=current?current.q.ints.map(i=>(current.root+i)%12):[],leftNotes=current?current.q.ints.map(i=>36+current.root+i):[],rightNotes=current?current.q.ints.map(i=>60+current.root+i):[],reveal=solved||guided,notePrompt=calibration?.phase==='notes'?calibration.notePrompts[calibration.noteIndex]:null,calibrationTargets=calibration&&!calibration.awaitingRelease?(notePrompt?[notePrompt.midi]:calibration.phase==='chords'?(calibration.chordPrompts[calibration.chordIndex]?.midis||[]):[]):[];let whiteIndex=-1;for(let midi=36;midi<84;midi++){
@@ -230,10 +245,10 @@
   function beginCalibration(){
     if(!analyser||calibration)return;const scaleNotes=[['C',0],['D',2],['E',4],['F',5],['G',7],['A',9],['B',11]],notePrompts=['left','right'].flatMap(hand=>scaleNotes.map(([name,offset])=>({name:`${name}${hand==='left'?2:4}`,hand,midi:(hand==='left'?36:60)+offset}))),chordPrompts=['left','right'].flatMap(hand=>levels[0].chords.map(chord=>{
       const base=hand==='left'?36:60,midis=chord.q.ints.map(interval=>base+chord.root+interval),quality=chord.q.name==='maj'?'major':'minor';return{
-        name:`${notes[chord.root]} ${quality}`,hand,midis,pcs:chord.q.ints.map(interval=>(chord.root+interval)%12)
+        name:`${notes[chord.root]} ${quality}`,hand,midis
       }
     }));calibration={
-      phase:'noise',until:performance.now()+2000,noiseSamples:[],playSum:0,playFrames:0,notePrompts,noteProfiles:[],profileSamples:[],chordPrompts,chordIndex:0,chordTargetRatios:[],chordExtraRatios:[]
+      phase:'noise',until:performance.now()+2000,noiseSamples:[],playSum:0,playFrames:0,notePrompts,noteProfiles:{},profileSamples:[],noteTuningSamples:[],tuningSamples:[],chordPrompts,chordIndex:0
     };goodSince=0;registeredNotes.clear();$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Cancel calibration';$('connectionText').textContent='Calibration started';render()
   }
   async function startMic(){
@@ -284,35 +299,37 @@
                 if(saliences[strongest]>1e-12)$('connectionText').textContent=`Hearing ${noteName(strongest)} · capturing ${calibration.notePrompts[calibration.noteIndex].name}`;
                 setStatus('Sound detected',`Capturing ${calibration.notePrompts[calibration.noteIndex].name} · release when prompted.`,'◉');
               }
-              calibration.playSum+=rms;calibration.playFrames++;calibration.profileSamples.push(measureHarmonicProfile(power,binHz,expectedMidi));if(calibration.playFrames>=8){
+              calibration.playSum+=rms;calibration.playFrames++;calibration.profileSamples.push(measureHarmonicProfile(power,binHz,expectedMidi));calibration.noteTuningSamples.push(estimateTuningCents(power,binHz,expectedMidi));if(calibration.playFrames>=8){
                 const recognized=calibrationNoteDetected(saliences,expectedMidi);calibration.noteLevels.push(calibration.playSum/calibration.playFrames);calibration.releaseReference=calibration.playSum/calibration.playFrames;
-                if(recognized)calibration.noteProfiles.push([0,1,2,3].map(i=>calibration.profileSamples.reduce((sum,profile)=>sum+profile[i],0)/calibration.profileSamples.length));
-                calibration.profileSamples=[];calibration.playSum=0;calibration.playFrames=0;calibration.noteIndex++;
+                if(recognized){calibration.noteProfiles[expectedMidi]=[0,1,2,3,4,5,6].map(i=>calibration.profileSamples.reduce((sum,profile)=>sum+profile[i],0)/calibration.profileSamples.length);calibration.tuningSamples.push(calibration.noteTuningSamples.sort((a,b)=>a-b)[Math.floor(calibration.noteTuningSamples.length/2)])}
+                calibration.profileSamples=[];calibration.noteTuningSamples=[];calibration.playSum=0;calibration.playFrames=0;calibration.noteIndex++;
                 if(calibration.noteIndex<calibration.notePrompts.length){
                   calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent=`Signal captured${recognized?' · pitch matched':' · pitch unclear, continuing'}; release, then play ${calibration.notePrompts[calibration.noteIndex].name}`;render();
                 }
                 else{
                   const levels=calibration.noteLevels.sort((a,b)=>a-b),measured=levels[Math.floor(levels.length/2)];playingLevel=Math.min(.2,measured);storage.set('chord-garden-playing-level',String(playingLevel));
-                  if(calibration.noteProfiles.length)harmonicProfile=[0,1,2,3].map(i=>{
-                    const values=calibration.noteProfiles.map(profile=>profile[i]).sort((a,b)=>a-b);return Math.max(.001,Math.min(.9,values[Math.floor(values.length/2)]||[.12,.05,.025,.015][i]))
-                  });
-                  storage.set('chord-garden-harmonic-profile',JSON.stringify(harmonicProfile));calibration.phase='chords';calibration.chordIndex=0;calibration.awaitingRelease=true;calibration.releaseFrames=0;calibration.playFrames=0;calibration.playSum=0;$('connectionText').textContent='Signal captured; release B4, then play C major.';render()
+                  if(calibration.tuningSamples.length){calibration.tuningSamples.sort((a,b)=>a-b);tuningCents=Math.max(-50,Math.min(50,calibration.tuningSamples[Math.floor(calibration.tuningSamples.length/2)]));storage.set('chord-garden-tuning-cents',String(tuningCents))}
+                  if(Object.keys(calibration.noteProfiles).length){
+                    noteTemplates={...noteTemplates,...calibration.noteProfiles};storage.set('chord-garden-note-templates',JSON.stringify(noteTemplates));
+                    const learned=Object.values(noteTemplates).filter(Array.isArray);if(learned.length)harmonicProfile=[0,1,2,3].map(i=>{
+                      const values=learned.map(profile=>profile[i]||.01).sort((a,b)=>a-b);return Math.max(.001,Math.min(.9,values[Math.floor(values.length/2)]||[.12,.05,.025,.015][i]))
+                    });storage.set('chord-garden-harmonic-profile',JSON.stringify(harmonicProfile))
+                  }
+                  calibration.phase='chords';calibration.chordIndex=0;calibration.awaitingRelease=true;calibration.releaseFrames=0;calibration.playFrames=0;calibration.playSum=0;$('connectionText').textContent='Sound captured; release B4, then play C major.';render()
                 }
               }
             }
             else{calibration.playSum=0;calibration.playFrames=0;calibration.profileSamples=[]}
           }
           else if(calibration.phase==='chords'){
-            const prompt=calibration.chordPrompts[calibration.chordIndex],metrics=calibrationChordMetrics(saliences,prompt.pcs);if(rms>signalGate){
+            const prompt=calibration.chordPrompts[calibration.chordIndex];if(rms>signalGate){
               if(!calibration.playFrames)setStatus('Sound detected',`Capturing ${prompt.hand} hand · ${prompt.name}.`,'◉');
-              calibration.playSum+=rms;if(metrics.targetRatio>.025){calibration.chordTargetRatios.push(metrics.targetRatio);calibration.chordExtraRatios.push(metrics.extraRatio)}if(++calibration.playFrames>=8){
+              calibration.playSum+=rms;if(++calibration.playFrames>=8){
                 calibration.releaseReference=calibration.playSum/calibration.playFrames;calibration.playSum=0;calibration.chordIndex++;calibration.playFrames=0;if(calibration.chordIndex<calibration.chordPrompts.length){
                   calibration.awaitingRelease=true;calibration.releaseFrames=0;$('connectionText').textContent='Sound captured; release, then play '+calibration.chordPrompts[calibration.chordIndex].name;render()
                 }
                 else{
-                  const sortedTarget=calibration.chordTargetRatios.slice().sort((a,b)=>a-b),sortedExtra=calibration.chordExtraRatios.slice().sort((a,b)=>a-b);if(sortedTarget.length){
-                    chordTargetFloor=Math.max(.04,Math.min(.12,sortedTarget[Math.floor(sortedTarget.length*.2)]*.55));chordExtraFloor=Math.max(.24,Math.min(.4,(sortedExtra[Math.floor(sortedExtra.length*.8)]||.2)*1.25));storage.set('chord-garden-chord-target-floor',String(chordTargetFloor));storage.set('chord-garden-chord-extra-floor',String(chordExtraFloor))
-                  }$('connectionText').textContent='Listening · calibration complete';calibration=null;$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate';render();setStatus('Calibration complete','Play the chord shown to continue.','✓');
+                  storage.remove('chord-garden-chord-target-floor');storage.remove('chord-garden-chord-extra-floor');$('connectionText').textContent='Listening · calibration complete';calibration=null;$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate';render();setStatus('Calibration complete','Play the chord shown to continue.','✓');
                 }
               }
             }
@@ -324,11 +341,11 @@
         }raf=requestAnimationFrame(loop);return;
       }
       const gate=Math.min(.045,Math.max(.004,noiseFloor*2.5,noisePeak*1.5,playingLevel*.12));if(rms>gate&&!deckPaused){
-        readPowerSpectrum(analyser,decibels,power);const noteScore=pitchSaliences(power,binHz),score=new Float32Array(12);for(let n=36;n<=84;n++)score[n%12]=Math.max(score[n%12],noteScore[n]);for(let pc=0;pc<12;pc++){score[pc]=.55*smoothedScores[pc]+.45*score[pc];smoothedScores[pc]=score[pc]}const peak=Math.max(...score),target=current.q.ints.map(i=>(current.root+i)%12),hasTarget=peak>0&&target.every(pc=>score[pc]>peak*chordTargetFloor),liveClasses=new Set();let extraStrong=0;for(let pc=0;pc<12;pc++){
-          const isTarget=target.includes(pc),relative=score[pc]/Math.max(peak,1e-20);if(isTarget?relative>.035:relative>chordExtraFloor*.9)liveClasses.add(pc);if(!isTarget&&score[pc]>peak*chordExtraFloor)extraStrong++
+        readPowerSpectrum(analyser,decibels,power);const noteScore=pitchSaliences(power,binHz),score=new Float32Array(12);for(let n=36;n<=84;n++)score[n%12]=Math.max(score[n%12],noteScore[n]);for(let pc=0;pc<12;pc++){score[pc]=.55*smoothedScores[pc]+.45*score[pc];smoothedScores[pc]=score[pc]}const peak=Math.max(...score),target=current.q.ints.map(i=>(current.root+i)%12),hasTarget=peak>0&&target.every(pc=>score[pc]>peak*.055),liveClasses=new Set();let extraStrong=0;for(let pc=0;pc<12;pc++){
+          const isTarget=target.includes(pc),relative=score[pc]/Math.max(peak,1e-20);if(isTarget?relative>.035:relative>.32)liveClasses.add(pc);if(!isTarget&&score[pc]>peak*.4)extraStrong++
         }
         const live=new Set();for(let midi=36;midi<=83;midi++)if(liveClasses.has(midi%12))live.add(midi);updateRegistered(live);if(hasTarget&&extraStrong===0){
-          if(!goodSince)goodSince=performance.now();else if(performance.now()-goodSince>=180)succeed()
+          if(!goodSince)goodSince=performance.now();else if(performance.now()-goodSince>=280)succeed()
         }
         else goodSince=0;
       }
