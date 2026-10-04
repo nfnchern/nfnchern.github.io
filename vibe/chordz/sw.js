@@ -1,5 +1,5 @@
-const CACHE = 'chordz-v26';
-const FILES = ['./index.html', './manifest.json', './icon.svg', './progressions.js'];
+const CACHE = 'chordz-v28';
+const FILES = ['./index.html', './manifest.json', './icon.svg', './progressions.js', './progression-graph.js'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES))));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))));
 self.addEventListener('fetch', event => {
