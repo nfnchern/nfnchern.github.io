@@ -14,6 +14,8 @@ Push the files to the repository's `main` branch and enable **Settings → Pages
 
 The app does not record or upload microphone audio. Calibration saves only quiet-room and played-note levels on this device. The first visit needs a network connection; the service worker caches the practice app for later offline use. For the most reliable iPhone installation, open the Pages URL in Safari, tap Share, then **Add to Home Screen**.
 
-## Chord filters
+## Chord pathway
 
-The default deck practices major chords rooted on C, F, G, D, A, and E. Use **Select all** or **Deselect all** for roots and chord types; select at least one of each to resume practice. Guided mode shows two chord voicings: blue for left hand and lime for right hand; coral marks detected notes. Calibration opens a visual prompt for each step.
+The six levels follow a gradual piano-teaching path: learn the six diatonic chords in C together, then add major and minor triads in more keys. Seventh chords follow once the triads are familiar, with diminished and augmented triads as an advanced final group. Each level includes earlier chords for review, and you can choose any level at any time.
+
+The full chord library appears below the practice deck. Its rows are roots and columns are chord qualities. Highlighted chords are included in the selected level; tap any chord to add or remove it, including chords beyond that level's suggested set. Level choice and custom chord selections are saved on this device. Level 6 contains all 84 chords. Guided mode shows two chord voicings: blue for left hand and lime for right hand; coral marks detected notes. Calibration opens a visual prompt for each step.
