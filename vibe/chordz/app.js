@@ -131,7 +131,7 @@
     const salience=new Float32Array(85);for(let midi=45;midi<=84;midi++)salience[midi]=noteSalience(power,binHz,midi);return salience
   }
   function calibrationNoteDetected(saliences,midi){
-    let peak=0;for(let n=45;n<=84;n++)peak=Math.max(peak,saliences[n]);return saliences[midi]>=Math.max(peak*.4,1e-12)
+    let peak=0;for(let n=45;n<=84;n++)peak=Math.max(peak,saliences[n]);return saliences[midi]>=Math.max(peak*.24,1e-12)
   }
   function calibrationChordMetrics(saliences,pcs){
     const score=new Float32Array(12);for(let n=45;n<=84;n++)score[n%12]=Math.max(score[n%12],saliences[n]);const peak=Math.max(...score),weakest=Math.min(...pcs.map(pc=>score[pc])),extra=Math.max(0,...Array.from(score,(value,pc)=>pcs.includes(pc)?0:value));return{
@@ -276,7 +276,7 @@
           }
         }
         else{
-          const signalGate=Math.max(.008,noiseFloor*3,noisePeak*1.6,noiseFloor+.005),releaseGate=Math.max(.003,noiseFloor*1.5,noisePeak*1.05),expectedMidi=calibration.phase==='notes'?60+notes.indexOf(calibration.noteNames[calibration.noteIndex]):0;readPowerSpectrum(analyser,decibels,power);const saliences=pitchSaliences(power,binHz);if(calibration.awaitingRelease){
+          const signalGate=Math.min(.035,Math.max(.003,noiseFloor*1.5,noisePeak*1.05,noiseFloor+.002)),releaseGate=Math.max(.002,noiseFloor*1.2,noisePeak*.9),expectedMidi=calibration.phase==='notes'?60+notes.indexOf(calibration.noteNames[calibration.noteIndex]):0;readPowerSpectrum(analyser,decibels,power);const saliences=pitchSaliences(power,binHz);if(calibration.awaitingRelease){
             const adaptiveReleaseGate=Math.max(noiseFloor*1.2,(calibration.releaseReference||releaseGate)*.18);if(rms<adaptiveReleaseGate){
               calibration.releaseFrames=(calibration.releaseFrames||0)+1;if(calibration.releaseFrames>=6){
                 calibration.awaitingRelease=false;calibration.releaseFrames=0;calibration.playSum=0;calibration.playFrames=0;$('connectionText').textContent=calibration.phase==='notes'?'Play '+calibration.noteNames[calibration.noteIndex]+'4':'Play '+calibration.chordPrompts[calibration.chordIndex].name;$('calibrateBtn').textContent=calibration.phase==='notes'?'Play '+calibration.noteNames[calibration.noteIndex]+'4':'Play '+calibration.chordPrompts[calibration.chordIndex].name
@@ -295,6 +295,13 @@
                 });storage.set('chord-garden-harmonic-profile',JSON.stringify(harmonicProfile));calibration.phase='chords';calibration.chordIndex=0;calibration.awaitingRelease=true;calibration.releaseFrames=0;calibration.playFrames=0;calibration.playSum=0;$('connectionText').textContent='Release B4, then play C major';$('calibrateBtn').textContent='Release, then play C major'
               }
             }
+          }
+          else if(calibration.phase==='notes'&&rms>signalGate){
+            let strongest=45;for(let midi=46;midi<=84;midi++)if(saliences[midi]>saliences[strongest])strongest=midi;
+            const now=performance.now();if(saliences[strongest]>1e-12&&now-(calibration.lastPitchHint||0)>500){
+              calibration.lastPitchHint=now;$('connectionText').textContent=`Hearing ${noteName(strongest)} · waiting for ${calibration.noteNames[calibration.noteIndex]}4`;
+            }
+            calibration.playSum=0;calibration.playFrames=0;calibration.profileSamples=[]
           }
           else if(calibration.phase==='chords'){
             const prompt=calibration.chordPrompts[calibration.chordIndex],metrics=calibrationChordMetrics(saliences,prompt.pcs),detected=rms>signalGate&&metrics.targetRatio>.08;if(calibration.awaitingRelease){
