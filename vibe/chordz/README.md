@@ -8,7 +8,7 @@ Push the files to the repository's `main` branch and enable **Settings → Pages
 
 ## Piano input
 
-- **Microphone:** Listening starts when the page opens and uses the browser's live audio input to analyze pitch classes locally. The browser may ask you to grant microphone permission; access requires HTTPS, which GitHub Pages supplies. Use **Stop listening** if you want to pause. Optional **Calibrate with notes** measures two seconds of quiet, then prompts C4, D4, E4, F4, G4, A4, and B4. Each prompt advances after the microphone detects a sustained signal clearly above the measured room noise; release each note before playing the next.
+- **Microphone:** Listening starts when the page opens and uses the browser's live audio input to analyze pitch classes locally. The browser may ask you to grant microphone permission; access requires HTTPS, which GitHub Pages supplies. Use **Stop listening** if you want to pause. Optional **Calibrate with notes** measures two seconds of quiet, then prompts C4, D4, E4, F4, G4, A4, and B4. Each prompt advances only after the microphone detects the expected pitch at a sustained level above the measured room noise; release each note before playing the next.
 - **Keyboard MIDI:** Uses Web MIDI when the browser supports it. Connect a USB MIDI keyboard or a compatible adapter before tapping Connect. iPhone Safari support varies by iOS/browser version.
 - Correct chords advance automatically. If a direct digital connection is not exposed to Safari, use a USB audio interface as the microphone input.
 
