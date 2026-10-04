@@ -63,6 +63,8 @@
     const value=Number(stored);
     return Number.isFinite(value)?value:fallback;
   };
+  const isIOSBrowser=/iPad|iPhone|iPod/.test(navigator.userAgent)||
+    (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   let current=null;
   let done=Math.max(0,Math.floor(storedNumber('chord-garden-total',0)));
   let audioCtx=null;
@@ -246,7 +248,9 @@
       const detail=`secure context=${isSecureContext}, mediaDevices=${!!navigator.mediaDevices}`;$('connectionText').textContent='Microphone API unavailable';$('connectBtn').textContent='◉  Start listening';toast('Microphone API unavailable ('+detail+'). Open this page over HTTPS.');return
     }
     let stage='starting audio engine';try{
-      audioCtx=new(window.AudioContext||window.webkitAudioContext)();await audioCtx.resume();stage='requesting microphone permission';stream=await navigator.mediaDevices.getUserMedia({
+      audioCtx=new(window.AudioContext||window.webkitAudioContext)();await audioCtx.resume();
+      if(audioCtx.state!=='running')throw new Error('Tap Start listening to let iOS start the audio engine.');
+      stage='requesting microphone permission';stream=await navigator.mediaDevices.getUserMedia({
         audio:{
           echoCancellation:false,noiseSuppression:false,autoGainControl:false
         }
@@ -419,5 +423,10 @@
     if(calibration?.phase!=='chords')return;calibration=null;hideCalibrationGuide();$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate';$('connectionText').textContent='Listening · note calibration complete'
   };$('doneCount').textContent=done;if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{
     
-  }));pick();startMic();
+  }));pick();
+  if(isIOSBrowser){
+    $('connectBtn').textContent='◉  Tap to start listening';
+    $('connectionText').textContent='On iOS, tap Start listening to allow microphone access and begin calibration.';
+  }
+  else startMic();
 })();
