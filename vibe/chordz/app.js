@@ -57,6 +57,7 @@
       }
     }
   };
+  storage.remove('chord-garden-total');storage.remove('chord-garden-streak');storage.remove('chord-garden-last');
   const storedNumber=(key,fallback)=>{
     const stored=storage.get(key);
     if(stored===null||stored.trim()==='')return fallback;
@@ -66,7 +67,6 @@
   const isIOSBrowser=/iPad|iPhone|iPod/.test(navigator.userAgent)||
     (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   let current=null;
-  let done=Math.max(0,Math.floor(storedNumber('chord-garden-total',0)));
   let audioCtx=null;
   let analyser=null;
   let stream=null;
@@ -112,9 +112,6 @@
   let progressionGraphModel=null;
   let currentProgressionIndex=null;
   let progressionChordIndex=0;
-  function localDateKey(date){
-    return[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-')
-  }
   function noteName(midi){
     return notes[midi%12]+(Math.floor(midi/12)-1)
   }
@@ -294,10 +291,10 @@
     }
     else if(current&&!deckPaused){
       $('cardLabel').textContent='Chord';
-      const root=notes[current.root],q=current.q,quality=document.createElement('span');quality.textContent=q.name;$('chordName').replaceChildren(document.createTextNode(root),quality);$('quality').textContent=`${root} ${q.label} · root position`;$('round').textContent=String(done+1).padStart(2,'0')
+      const root=notes[current.root],q=current.q,quality=document.createElement('span');quality.textContent=q.name;$('chordName').replaceChildren(document.createTextNode(root),quality);$('quality').textContent=`${root} ${q.label} · root position`;$('round').textContent=''
     }
     else{
-      $('cardLabel').textContent='Chord';$('chordName').textContent='—';$('quality').textContent='Choose a learning level to begin';$('round').textContent='--'
+      $('cardLabel').textContent='Chord';$('chordName').textContent='—';$('quality').textContent='Choose a learning level to begin';$('round').textContent=''
     }renderKeyboard()
   }
   function chordId(chord){
@@ -337,9 +334,7 @@
     $('statusTitle').textContent=title;$('statusDetail').textContent=detail;$('statusIcon').textContent=icon
   }
   function succeed(){
-    if(solved)return;solved=true;done++;storage.set('chord-garden-total',done);$('doneCount').textContent=done;const today=localDateKey(new Date()),previous=storage.get('chord-garden-last');let streak=Number(storage.get('chord-garden-streak')||0);if(previous!==today){
-      const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);streak=previous===localDateKey(yesterday)?streak+1:1;storage.set('chord-garden-last',today);storage.set('chord-garden-streak',streak)
-    }if(deckMode==='walk')advanceProgressionWalk();else pick()
+    if(solved)return;solved=true;if(deckMode==='walk')advanceProgressionWalk();else pick()
   }
   function toast(message){
     $('toast').textContent=message;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3200)
@@ -464,7 +459,7 @@
     const host=$('progressionGraph'),legend=$('progressionLegend'),status=$('graphStatus');progressionGraphModel=window.ChordProgressionGraph.buildGraph(levels[selectedLevel].progressions||[]);const items=progressionGraphModel.progressions,edges=progressionGraphModel.edges;host.innerHTML='';legend.innerHTML='';if(!items.length){
       host.innerHTML='<div class="graph-empty">No progression connections available for this level.</div>';status.textContent='';return
     }
-    const width=Math.max(760,items.length*11+200),height=Math.max(430,items.length*11+200),cx=width/2,cy=height/2,rx=width*.42,ry=height*.42,nodeRadius=items.length>35?11:items.length>20?14:17,points=items.map((item,i)=>{
+    const width=Math.max(760,host.clientWidth,items.length*11+200),height=Math.max(430,items.length*11+200),cx=width/2,cy=height/2,rx=width*.42,ry=height*.42,nodeRadius=items.length>35?11:items.length>20?14:17,points=items.map((item,i)=>{
       const angle=-Math.PI/2+2*Math.PI*i/items.length;return{
         x:cx+rx*Math.cos(angle),y:cy+ry*Math.sin(angle)
       }
@@ -502,6 +497,9 @@
   function updateGraphWalkMarker(){
     document.querySelectorAll('#progressionGraph .graph-node').forEach(node=>node.classList.toggle('walk-current',deckMode==='walk'&&Number(node.dataset.index)===currentProgressionIndex));if(deckMode==='walk'&&currentProgressionIndex!==null)$('graphStatus').textContent=`${progressionGraphModel.progressions.length} progressions · random walk at P${String(currentProgressionIndex+1).padStart(2,'0')}`;else if(progressionGraphModel)$('graphStatus').textContent=`${progressionGraphModel.progressions.length} progressions · ${progressionGraphModel.edges.length} directed connections`
   }
+  let graphResizeFrame=0;window.addEventListener('resize',()=>{
+    if(graphResizeFrame)cancelAnimationFrame(graphResizeFrame);graphResizeFrame=requestAnimationFrame(()=>{graphResizeFrame=0;renderProgressionGraph()})
+  });
   function renderLibrary(){
     const table=$('chordLibrary'),selected=new Set(levelDeck().map(chordId));table.innerHTML='';const head=document.createElement('thead'),headRow=document.createElement('tr'),rootHead=document.createElement('th');rootHead.scope='col';rootHead.textContent='ROOT';headRow.appendChild(rootHead);qualities.forEach(q=>{
       const th=document.createElement('th');th.scope='col';th.textContent=q.short;headRow.appendChild(th)
@@ -542,7 +540,7 @@
     else startMic()
   };$('calibrateBtn').onclick=()=>{
     if(!calibration)beginCalibration();else{calibration=null;$('calibrateBtn').disabled=false;$('calibrateBtn').textContent='Calibrate';$('connectionText').textContent='Calibration cancelled';render();setStatus('Calibration cancelled','The current chord is ready for practice.','♪')}
-  };$('doneCount').textContent=done;if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{
+  };if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{
     
   }));pick();
   if(isIOSBrowser){

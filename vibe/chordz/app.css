@@ -34,10 +34,11 @@ body:before {
   background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.11'/%3E%3C/svg%3E")
 }
 
-    .site {
-  max-width:1080px;
+.site {
+  width:100%;
+  max-width:none;
   margin:auto;
-  padding:20px 28px 40px;
+  padding:20px clamp(16px,2.5vw,44px) 40px;
   position:relative
 }
 .topbar {
@@ -69,37 +70,17 @@ body:before {
   color:var(--lime)
 }
 
-    .trainer {
-  max-width:960px;
+.trainer {
+  width:100%;
   margin:0 auto
-}
-.intro {
-  margin:0 0 24px
-}
-.eyebrow {
-  font:11px var(--mono);
-  text-transform:uppercase;
-  letter-spacing:1.4px;
-  color:#afca5c;
-  margin:0 0 10px
-}
-.title {
-  font:750 clamp(29px,4vw,42px)/1.12 var(--display);
-  letter-spacing:-1.8px;
-  margin:0
-}
-.subtitle {
-  font-size:13px;
-  color:var(--muted);
-  margin:9px 0 0
 }
 .columns {
   display:grid;
-  grid-template-columns:minmax(0,1fr) 295px;
-  gap:17px;
+  grid-template-columns:minmax(0,1fr);
+  gap:0;
   align-items:start
 }
-.card,.sidecard {
+.card {
   background:var(--panel);
   border:1px solid var(--line);
   border-radius:15px;
@@ -116,11 +97,6 @@ body:before {
   text-transform:uppercase;
   letter-spacing:.8px
 }
-.cardtop-right {
-  display:flex;
-  align-items:center;
-  gap:12px
-}
 .deck-mode {
   padding:5px 7px;
   border:1px solid var(--line);
@@ -135,11 +111,6 @@ body:before {
 .deck-mode[aria-pressed="true"] {
   border-color:#8da84c;
   color:var(--lime)
-}
-.count {
-  color:#c2cabb;
-  text-transform:none;
-  letter-spacing:0
 }
 .prompt {
   padding:6px 21px 17px
@@ -271,14 +242,6 @@ body:before {
 .hidden {
   display:none!important
 }
-.side {
-  display:flex;
-  flex-direction:column;
-  gap:12px
-}
-.sidecard {
-  padding:16px
-}
 .sidetitle {
   font:700 13px var(--display);
   margin:0 0 5px
@@ -290,7 +253,6 @@ body:before {
   margin:0
 }
 .action {
-  width:100%;
   padding:11px;
   background:var(--lime);
   border:0;
@@ -341,7 +303,7 @@ body:before {
 }
 .hint {
   display:flex;
-  justify-content:space-between;
+  justify-content:flex-end;
   align-items:center;
   margin-top:13px;
   color:#aab49f;
@@ -390,11 +352,6 @@ body:before {
   line-height:1.5;
   color:var(--muted);
   margin:9px 0 0
-}
-.foot {
-  color:#777f73;
-  font:9px var(--mono);
-  margin-top:13px
 }
 .toast {
   position:fixed;
@@ -531,15 +488,71 @@ body:before {
   margin-bottom:3px
 }
 
-    .progression-graph {
-  grid-column:1;
-  grid-row:2;
+.progression-graph {
   margin-top:14px;
   padding:15px 17px 12px
 }
-.side {
+.practice-tools {
+  display:grid;
+  grid-template-columns:minmax(260px,.8fr) minmax(0,2fr);
+  gap:28px;
+  align-items:start;
+  margin-top:18px;
+  padding:17px 4px 0;
+  border-top:1px solid var(--line)
+}
+.settings-title {
+  grid-column:1 / -1;
+  margin:0;
+  font:700 16px var(--display)
+}
+.practice-tools > .privacy {
+  grid-column:1 / -1;
+  margin-top:0
+}
+.audio-controls {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  column-gap:16px
+}
+.tool-heading {
+  min-width:0
+}
+.audio-actions {
   grid-column:2;
-  grid-row:1 / span 2
+  grid-row:1 / span 2;
+  display:flex;
+  align-items:center;
+  gap:12px
+}
+.audio-actions .action {
+  white-space:nowrap
+}
+.audio-controls .connection {
+  grid-column:1;
+  margin-top:7px
+}
+.audio-controls .volume {
+  grid-column:1 / -1;
+  width:100%;
+  margin-top:10px
+}
+.pathway-controls {
+  min-width:0
+}
+.pathway-heading {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px
+}
+.pathway-controls .level-grid {
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  margin-top:10px
+}
+.pathway-controls .level-detail {
+  margin-top:8px
 }
 .graph-heading {
   display:flex;
@@ -722,24 +735,14 @@ body:before {
   }
   .columns {
     grid-template-columns:1fr;
-    gap:11px
+    gap:0
   }
-  .progression-graph,.side {
-    grid-column:auto;
-    grid-row:auto
-  }
-  .side {
-    display:grid;
-    grid-template-columns:1fr 1fr
-  }
-  .sidecard:first-child {
-    grid-column:span 2
+  .practice-tools {
+    grid-template-columns:1fr;
+    gap:18px
   }
   .keyboard {
     height:108px
-  }
-  .intro {
-    margin-bottom:19px
   }
   }
 
@@ -751,11 +754,16 @@ body:before {
     padding-left:13px;
     padding-right:13px
   }
-  .side {
-    grid-template-columns:1fr
+  .audio-controls {
+    grid-template-columns:minmax(0,1fr) auto;
+    column-gap:9px
   }
-  .sidecard:first-child {
-    grid-column:auto
+  .audio-actions {
+    gap:8px
+  }
+  .audio-actions .action {
+    padding:9px 8px;
+    font-size:10px
   }
   .response {
     margin-left:13px;
