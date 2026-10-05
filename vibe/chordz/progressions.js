@@ -20,11 +20,3 @@ const chordSets = [
   [...triads,...sevenths,...roots.flatMap(root => [root + 'dim',root + 'aug'])]
 ];
 window.chordDeckSymbolsByLevel = chordSets;
-window.chordProgressionsByLevel = window.chordProgressionsByLevel.map((progressions, level) => {
-  const chords = chordSets[level];
-  const bridges = chords.map((chord, index) => {
-    const next = chords[(index + 1) % chords.length];
-    return `Level bridge · ${chord} – ${next}`;
-  });
-  return [...progressions, ...bridges];
-});

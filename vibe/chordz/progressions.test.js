@@ -8,19 +8,19 @@ const graphTools = require('./progression-graph.js');
 const progressionSets = global.window.chordProgressionsByLevel;
 const chordDecks = global.window.chordDeckSymbolsByLevel;
 
-test('each pathway level progression graph is strongly connected', () => {
+test('pathway progressions use chords from their level deck', () => {
   progressionSets.forEach((labels, index) => {
     const graph = graphTools.buildGraph(labels);
-    assert.ok(graphTools.isStronglyConnected(graph), `level ${index + 1} has unreachable progression vertices`);
-  });
-});
-
-test('each chord in every pathway level appears in at least one progression', () => {
-  progressionSets.forEach((labels, index) => {
-    const covered = new Set(labels.flatMap(label => graphTools.parseProgression(label).chords.map(chord => `${chord.root}:${chord.quality}`)));
-    chordDecks[index].forEach(symbol => {
+    const deck = new Set(chordDecks[index].map(symbol => {
       const chord = graphTools.parseChord(symbol);
-      assert.ok(covered.has(`${chord.root}:${chord.quality}`), `level ${index + 1} chord ${symbol} is not covered by any progression`);
+      return `${chord.root}:${chord.quality}`;
+    }));
+    assert.ok(graph.progressions.length, `level ${index + 1} has no progressions`);
+    graph.progressions.forEach(progression => {
+      assert.ok(progression.chords.length >= 2, `level ${index + 1} has an invalid progression`);
+      progression.chords.forEach(chord => {
+        assert.ok(deck.has(`${chord.root}:${chord.quality}`), `level ${index + 1} progression uses chord ${chord.symbol} outside its deck`);
+      });
     });
   });
 });

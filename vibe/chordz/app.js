@@ -322,11 +322,15 @@
     }deckPaused=false;current=choice;solved=false;goodSince=0;registeredNotes.clear();render();$('response').classList.remove('good');setStatus('Ready when you are','Play all the notes together to continue.','♪');updateGraphWalkMarker()
   }
   function advanceProgressionWalk(){
-    const currentSequence=progressionGraphModel?.progressions[currentProgressionIndex]?.chords||[];if(progressionChordIndex+1<currentSequence.length){
+    const progressions=progressionGraphModel?.progressions||[];if(!progressions.length){
+      currentProgressionIndex=null;progressionChordIndex=0;pick();return
+    }
+    const currentSequence=progressions[currentProgressionIndex]?.chords||[];if(progressionChordIndex+1<currentSequence.length){
       progressionChordIndex++
     }
     else{
-      const neighbors=progressionGraphModel?.outgoing[currentProgressionIndex]||[];currentProgressionIndex=neighbors.length?neighbors[Math.floor(Math.random()*neighbors.length)]:Math.floor(Math.random()*progressionGraphModel.progressions.length);progressionChordIndex=0
+      const neighbors=progressionGraphModel?.outgoing[currentProgressionIndex]||[];
+      currentProgressionIndex=neighbors.length?neighbors[Math.floor(Math.random()*neighbors.length)]:Math.floor(Math.random()*progressions.length);progressionChordIndex=0
     }pick()
   }
   function setStatus(title,detail,icon){
