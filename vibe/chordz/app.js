@@ -70,6 +70,11 @@
   let audioCtx=null;
   let analyser=null;
   let stream=null;
+  let midiAccess=null;
+  let midiInput=null;
+  const midiNotes=new Map();
+  let midiAwaitingRelease=false;
+  let midiMatchTimer=0;
   let raf=0;
   let registeredNotes=new Set();
   let selectedLevel=(()=>{
@@ -304,6 +309,7 @@
     const chords=levels[index].chords;return index===selectedLevel&&Array.isArray(levelCustomization)?chordCatalog.filter(chord=>levelCustomization.includes(chordId(chord))):chords.slice()
   }
   function pick(){
+    clearMidiMatchTimer();if(midiInput&&midiNotes.size)midiAwaitingRelease=true;
     let choice;if(deckMode==='walk'&&progressionGraphModel?.progressions.length){
       if(currentProgressionIndex===null){
         currentProgressionIndex=Math.floor(Math.random()*progressionGraphModel.progressions.length);progressionChordIndex=0
@@ -334,13 +340,79 @@
     $('statusTitle').textContent=title;$('statusDetail').textContent=detail;$('statusIcon').textContent=icon
   }
   function succeed(){
-    if(solved)return;solved=true;if(deckMode==='walk')advanceProgressionWalk();else pick()
+    if(solved)return;solved=true;if(midiInput&&midiNotes.size)midiAwaitingRelease=true;if(deckMode==='walk')advanceProgressionWalk();else pick()
+  }
+  function clearMidiMatchTimer(){
+    if(midiMatchTimer)clearTimeout(midiMatchTimer);midiMatchTimer=0
+  }
+  function midiChordMatches(){
+    if(!midiInput||midiAwaitingRelease||!current||deckPaused)return false;
+    const chroma=new Float32Array(12);for(const pitch of midiNotes.values())chroma[pitch%12]=1;
+    const targetPCs=current.q.ints.map(interval=>(current.root+interval)%12);
+    return evaluateChordMatch(chroma,current.root,current.q,targetPCs).matched
+  }
+  function evaluateMidiInput(){
+    const activeNotes=new Set(midiNotes.values());updateRegistered(activeNotes);
+    if(midiAwaitingRelease){
+      clearMidiMatchTimer();if(activeNotes.size)return;midiAwaitingRelease=false
+    }
+    if(midiChordMatches()){
+      if(!midiMatchTimer)midiMatchTimer=setTimeout(()=>{midiMatchTimer=0;if(midiChordMatches())succeed()},150)
+    }
+    else clearMidiMatchTimer()
+  }
+  function handleMidiMessage(event){
+    const [status,pitch,velocity]=event.data,command=status&0xf0,channel=status&0x0f,key=`${channel}:${pitch}`;
+    if(command===0x90&&velocity>0)midiNotes.set(key,pitch);
+    else if(command===0x80||(command===0x90&&velocity===0))midiNotes.delete(key);
+    else if(command===0xb0&&(pitch===120||pitch===123)){
+      for(const noteKey of midiNotes.keys())if(noteKey.startsWith(`${channel}:`))midiNotes.delete(noteKey)
+    }
+    else return;
+    evaluateMidiInput()
+  }
+  function setMidiInput(input){
+    if(midiInput===input)return;
+    if(midiInput)midiInput.onmidimessage=null;
+    if(input)stopMic();
+    midiInput=input;midiNotes.clear();midiAwaitingRelease=false;clearMidiMatchTimer();updateRegistered(new Set());
+    if(input){
+      midiInput.onmidimessage=handleMidiMessage;$('midiDot').classList.add('live');$('midiStatus').textContent=`Connected · ${input.name||'MIDI keyboard'}`;$('midiConnectBtn').textContent='Disconnect MIDI';$('connectBtn').textContent='◉  Start microphone';$('calibrateBtn').disabled=true;$('connDot').classList.remove('live');$('connectionText').textContent='Microphone paused · MIDI input active'
+    }
+    else{
+      $('midiDot').classList.remove('live');$('midiStatus').textContent='MIDI disconnected';$('midiConnectBtn').textContent='Connect MIDI';$('midiInputSelect').classList.add('hidden');$('connectBtn').textContent='◉  Start listening';$('calibrateBtn').disabled=true;$('connDot').classList.remove('live');$('connectionText').textContent='MIDI disconnected'
+    }
+  }
+  function refreshMidiInputs(){
+    if(!midiAccess)return;
+    const inputs=[...midiAccess.inputs.values()].filter(input=>input.state==='connected'),select=$('midiInputSelect'),selectedId=midiInput?.id;
+    select.replaceChildren(...inputs.map(input=>{const option=document.createElement('option');option.value=input.id;option.textContent=input.name||input.manufacturer||'MIDI keyboard';return option}));
+    select.classList.toggle('hidden',inputs.length<2);
+    if(selectedId&&inputs.some(input=>input.id===selectedId)){select.value=selectedId;return}
+    if(midiInput)setMidiInput(null);
+    if(inputs.length){select.value=inputs[0].id;setMidiInput(inputs[0])}
+    else{$('midiDot').classList.remove('live');$('midiStatus').textContent='No MIDI input found · connect a keyboard and retry'}
+  }
+  async function connectMidi(silent=false){
+    if(midiInput){
+      setMidiInput(null);if(midiAccess)midiAccess.onstatechange=null;midiAccess=null;$('midiStatus').textContent='MIDI disconnected';return
+    }
+    if(typeof navigator.requestMIDIAccess!=='function'){
+      $('midiStatus').textContent='Web MIDI is not supported in this browser';if(!silent)toast('Web MIDI is unavailable here. Use a MIDI-capable browser or microphone input.');return
+    }
+    $('midiStatus').textContent='Requesting MIDI access…';
+    try{
+      midiAccess=await navigator.requestMIDIAccess({sysex:false});midiAccess.onstatechange=refreshMidiInputs;refreshMidiInputs()
+    }
+    catch(error){
+      midiAccess=null;$('midiStatus').textContent='MIDI access was not granted';if(!silent)toast(`Could not connect MIDI: ${error?.message||error}`)
+    }
   }
   function toast(message){
     $('toast').textContent=message;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),3200)
   }
   function stopMic(){
-    if(raf)cancelAnimationFrame(raf);raf=0;calibration=null;$('calibrateBtn').disabled=true;$('calibrateBtn').textContent='Calibrate';if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;analyser=null;if(audioCtx){
+    if(raf)cancelAnimationFrame(raf);raf=0;calibration=null;goodSince=0;$('calibrateBtn').disabled=true;$('calibrateBtn').textContent='Calibrate';if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;analyser=null;if(audioCtx){
       audioCtx.close().catch(()=>{
         
       });audioCtx=null
@@ -533,7 +605,10 @@
     deckMode=deckMode==='walk'?'random':'walk';storage.set('chord-garden-deck-mode',deckMode);currentProgressionIndex=null;progressionChordIndex=0;updateDeckModeButton();pick()
   };$('guidedBtn').setAttribute('aria-pressed',String(guided));$('guidedBtn').textContent=`Guided mode: ${guided?'on':'off'}`;$('guidedBtn').onclick=()=>{
     guided=!guided;storage.set('chord-garden-guided',String(guided));$('guidedBtn').setAttribute('aria-pressed',String(guided));$('guidedBtn').textContent=`Guided mode: ${guided?'on':'off'}`;render()
+  };$('midiConnectBtn').onclick=()=>connectMidi();$('midiInputSelect').onchange=()=>{
+    const selected=midiAccess?.inputs.get($('midiInputSelect').value);if(selected)setMidiInput(selected)
   };$('connectBtn').onclick=()=>{
+    if(midiInput){if(midiAccess)midiAccess.onstatechange=null;midiAccess=null;setMidiInput(null)}
     if(stream){
       stopMic();updateRegistered(new Set());$('connDot').classList.remove('live');$('connectionText').textContent='Microphone stopped';$('connectBtn').textContent='◉  Start listening'
     }
@@ -548,4 +623,5 @@
     $('connectionText').textContent='On iOS, tap Start listening to allow microphone access.';
   }
   else startMic();
+  connectMidi(true);
 })();

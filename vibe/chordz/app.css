@@ -301,23 +301,6 @@ body:before {
   background:var(--mint);
   transition:width .08s
 }
-.hint {
-  display:flex;
-  justify-content:flex-end;
-  align-items:center;
-  margin-top:13px;
-  color:#aab49f;
-  font:10px var(--mono)
-}
-.hint button {
-  background:none;
-  border:0;
-  color:var(--lime);
-  font:10px var(--mono);
-  text-decoration:underline;
-  text-underline-offset:3px;
-  cursor:pointer
-}
 .tips {
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -392,20 +375,24 @@ body:before {
   cursor:default;
   text-decoration:none
 }
-.hint-actions {
+.setting-toggles {
   display:flex;
-  gap:14px;
-  align-items:center
+  gap:7px;
+  align-items:center;
+  flex:none
 }
 .guided-btn {
-  padding:0;
-  border:0;
-  background:none;
+  padding:5px 7px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:#141914;
   color:#aab49f;
-  font:10px var(--mono);
-  cursor:pointer
+  font:9px var(--mono);
+  cursor:pointer;
+  white-space:nowrap
 }
 .guided-btn[aria-pressed="true"] {
+  border-color:#8da84c;
   color:var(--lime)
 }
 
@@ -545,7 +532,8 @@ body:before {
   display:flex;
   justify-content:space-between;
   align-items:center;
-  gap:12px
+  gap:12px;
+  flex-wrap:wrap
 }
 .pathway-controls .level-grid {
   grid-template-columns:repeat(6,minmax(0,1fr));
@@ -553,6 +541,47 @@ body:before {
 }
 .pathway-controls .level-detail {
   margin-top:8px
+}
+.midi-controls {
+  grid-column:1 / -1;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  column-gap:16px;
+  padding-top:12px;
+  border-top:1px solid var(--line)
+}
+.midi-actions {
+  grid-column:2;
+  grid-row:1 / span 2;
+  display:flex;
+  align-items:center;
+  gap:10px
+}
+.midi-select {
+  max-width:min(260px,35vw);
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:#141914;
+  color:var(--text);
+  font:11px var(--sans)
+}
+.midi-controls .connection {
+  grid-column:1;
+  margin-top:6px
+}
+.midi-dot {
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#65715f;
+  margin-top:3px;
+  flex:none
+}
+.midi-dot.live {
+  background:var(--mint);
+  box-shadow:0 0 0 3px #90d6a21b
 }
 .graph-heading {
   display:flex;
@@ -740,6 +769,9 @@ body:before {
   .practice-tools {
     grid-template-columns:1fr;
     gap:18px
+  }
+  .midi-controls {
+    grid-template-columns:minmax(0,1fr) auto
   }
   .keyboard {
     height:108px

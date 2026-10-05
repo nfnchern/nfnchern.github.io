@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#101510">
-  <meta name="description" content="A pocket practice deck for piano chords, using your microphone.">
+  <meta name="description" content="A pocket practice deck for piano chords, using a microphone or MIDI keyboard.">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
@@ -13,7 +13,7 @@
 </head>
 <body>
   <div class="site">
-    <header class="topbar"><div class="identity">chordz <span class="version">v47</span></div><a class="back" href="../">← HOME</a></header>
+    <header class="topbar"><div class="identity">chordz <span class="version">v51</span></div><a class="back" href="../">← HOME</a></header>
     <main>
       <section aria-label="Piano chord practice">
         <div class="trainer">
@@ -23,8 +23,9 @@
               <div class="audio-actions"><button class="action" id="connectBtn">Starting microphone…</button><button class="calibrate" id="calibrateBtn" type="button" disabled>Calibrate</button></div>
               <div class="connection"><i class="dot" id="connDot"></i><span id="connectionText">No input connected yet</span></div><div class="volume hidden" id="volume"><span id="volumeBar"></span></div>
             </div>
-            <div class="pathway-controls"><div class="pathway-heading"><div class="tool-heading"><h3 class="sidetitle">Chord pathway</h3><p class="sidecopy">Learn in small sets. Earlier chords stay in the deck for review.</p></div><button class="deck-mode" id="deckModeBtn" type="button" aria-pressed="true">Progression walk</button></div><div class="level-grid" id="levelGrid" aria-label="Choose a chord learning level"></div><div class="level-detail" id="levelDetail" aria-live="polite"><strong id="levelTitle"></strong><span id="levelSummary"></span></div></div>
-            <details class="privacy"><summary>Connect your piano · Input and offline details</summary><p>Place your phone near the piano speaker and play clearly. A USB audio interface can send the piano's sound directly to the phone's microphone input. Microphone audio stays on this device and is never recorded or uploaded. Calibration measures the quiet-room level, tunes the input, learns note spectra from prompted single notes, and checks the six Level 1 chords in both hand ranges. It saves only compact measurements on this device. The app requests reduced echo cancellation, noise suppression, and automatic gain control where supported. After the first visit, the practice page is cached for offline use; microphone access requires HTTPS.</p></details>
+            <div class="pathway-controls"><div class="pathway-heading"><div class="tool-heading"><h3 class="sidetitle">Chord pathway</h3><p class="sidecopy">Learn in small sets. Earlier chords stay in the deck for review.</p></div><div class="setting-toggles"><button class="deck-mode" id="deckModeBtn" type="button" aria-pressed="true">Progression walk</button><button class="guided-btn" id="guidedBtn" type="button" aria-pressed="true">Guided mode: on</button></div></div><div class="level-grid" id="levelGrid" aria-label="Choose a chord learning level"></div><div class="level-detail" id="levelDetail" aria-live="polite"><strong id="levelTitle"></strong><span id="levelSummary"></span></div></div>
+            <div class="midi-controls"><div class="tool-heading"><h3 class="sidetitle">MIDI keyboard</h3><p class="sidecopy">Connect a USB or Bluetooth MIDI keyboard for direct note detection.</p></div><div class="midi-actions"><button class="action secondary" id="midiConnectBtn" type="button">Connect MIDI</button><select id="midiInputSelect" class="midi-select hidden" aria-label="Select MIDI keyboard"></select></div><div class="connection"><i class="midi-dot" id="midiDot"></i><span id="midiStatus">Optional · use a MIDI-capable browser</span></div></div>
+            <details class="privacy"><summary>Connect your piano · Input and offline details</summary><p>Place your phone near the piano speaker and play clearly, or connect a USB or Bluetooth MIDI keyboard in a browser that supports Web MIDI. Audio and MIDI input are analyzed on this device and are never recorded or uploaded. Calibration measures the quiet-room level, tunes the microphone input, and learns note spectra from prompted single notes. It saves only compact measurements on this device. The app requests reduced echo cancellation, noise suppression, and automatic gain control where supported. After the first visit, the practice page is cached for offline use; microphone and MIDI access require a secure context.</p></details>
           </section>
           <div class="columns">
             <article class="card">
@@ -36,7 +37,6 @@
             <section class="card progression-graph" aria-labelledby="graphTitle"><div class="graph-heading"><div><h2 class="graph-title" id="graphTitle">Progression Network</h2><p class="graph-description">Each node is a progression. Arrows link equivalent ending and starting chords. A bright outline marks the current node during progression walk.</p></div><p class="graph-status" id="graphStatus" aria-live="polite"></p></div><div class="graph-scroll" id="progressionGraph"></div><div class="graph-legend" id="progressionLegend" aria-label="Progression categories"></div></section>
           </div>
           <section class="card library"><div class="library-head"><div><h2 class="sidetitle">Chord library</h2><p class="sidecopy">Tap chords to customize this level. Changes are saved while it remains selected; selecting a level restores its preset.</p></div><span class="library-count" id="libraryCount"></span></div><div class="library-scroll"><table class="library-table" id="chordLibrary" aria-label="All chords, with the current level's selected chords highlighted"></table></div></section>
-          <div class="hint"><div class="hint-actions"><button class="guided-btn" id="guidedBtn" type="button" aria-pressed="true">Guided mode: on</button></div></div>
         </div>
       </section>
     </main>
