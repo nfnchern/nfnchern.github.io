@@ -73,6 +73,9 @@
   let midiAccess=null;
   let midiInput=null;
   const midiNotes=new Map();
+  const midiAttempt=new Set();
+  const audioAttempt=new Set();
+  let audioAttemptBlocked=false;
   let midiAwaitingRelease=false;
   let midiMatchTimer=0;
   let raf=0;
@@ -305,14 +308,19 @@
   function chordId(chord){
     return `${chord.root}:${chord.q.name}`
   }
+  function progressionChordKey(chord){
+    if(!chord)return'';const quality=chord.q||qualities.find(item=>item.name===chord.quality);return quality?quality.ints.map(interval=>(chord.root+interval)%12).sort((a,b)=>a-b).join(','):''
+  }
   function levelDeck(index=selectedLevel){
     const chords=levels[index].chords;return index===selectedLevel&&Array.isArray(levelCustomization)?chordCatalog.filter(chord=>levelCustomization.includes(chordId(chord))):chords.slice()
   }
   function pick(){
-    clearMidiMatchTimer();if(midiInput&&midiNotes.size)midiAwaitingRelease=true;
+    clearMidiMatchTimer();midiAttempt.clear();audioAttempt.clear();audioAttemptBlocked=false;goodSince=0;if(midiInput&&midiNotes.size)midiAwaitingRelease=true;
     let choice;if(deckMode==='walk'&&progressionGraphModel?.progressions.length){
       if(currentProgressionIndex===null){
-        currentProgressionIndex=Math.floor(Math.random()*progressionGraphModel.progressions.length);progressionChordIndex=0
+        const progressions=progressionGraphModel.progressions,starts=progressions.map((progression,index)=>({index,chordIndex:0,chord:progression.chords[0]})).filter(item=>item.chord&&progressionChordKey(item.chord)!==progressionChordKey(current));
+        if(current&&starts.length){const start=starts[Math.floor(Math.random()*starts.length)];currentProgressionIndex=start.index;progressionChordIndex=start.chordIndex}
+        else{currentProgressionIndex=Math.floor(Math.random()*progressions.length);progressionChordIndex=0}
       }
       const chord=progressionGraphModel.progressions[currentProgressionIndex].chords[progressionChordIndex];choice=chord&&{
         root:chord.root,q:qualities.find(quality=>quality.name===chord.quality)
@@ -322,19 +330,29 @@
       let pool=levelDeck();if(pool.length>1&&current)pool=pool.filter(chord=>chord.root!==current.root||chord.q!==current.q);if(pool.length)choice=pool[Math.floor(Math.random()*pool.length)]
     }if(!choice){
       deckPaused=true;solved=true;goodSince=0;registeredNotes.clear();render();setStatus('No chords in this level','Add chords from the library below to start practicing.','♪');return
-    }deckPaused=false;current=choice;solved=false;goodSince=0;registeredNotes.clear();render();$('response').classList.remove('good');setStatus('Ready when you are','Play all the notes together to continue.','♪');updateGraphWalkMarker()
+    }deckPaused=false;current=choice;solved=false;goodSince=0;registeredNotes.clear();render();$('response').classList.remove('good');setStatus('Ready when you are','Play the chord together or one note at a time, in any order.','♪');updateGraphWalkMarker()
   }
   function advanceProgressionWalk(){
     const progressions=progressionGraphModel?.progressions||[];if(!progressions.length){
       currentProgressionIndex=null;progressionChordIndex=0;pick();return
     }
-    const currentSequence=progressions[currentProgressionIndex]?.chords||[];if(progressionChordIndex+1<currentSequence.length){
-      progressionChordIndex++
+    const previousKey=progressionChordKey(current),stepLimit=Math.max(1,progressions.reduce((sum,item)=>sum+item.chords.length,0)*2);
+    const step=()=>{
+      const sequence=progressions[currentProgressionIndex]?.chords||[];
+      if(progressionChordIndex+1<sequence.length)progressionChordIndex++;
+      else{
+        const neighbors=progressionGraphModel?.outgoing[currentProgressionIndex]||[];
+        currentProgressionIndex=neighbors.length?neighbors[Math.floor(Math.random()*neighbors.length)]:Math.floor(Math.random()*progressions.length);progressionChordIndex=0
+      }
+    };
+    for(let i=0;i<stepLimit;i++){
+      step();const candidate=progressions[currentProgressionIndex]?.chords[progressionChordIndex];if(progressionChordKey(candidate)!==previousKey)break
     }
-    else{
-      const neighbors=progressionGraphModel?.outgoing[currentProgressionIndex]||[];
-      currentProgressionIndex=neighbors.length?neighbors[Math.floor(Math.random()*neighbors.length)]:Math.floor(Math.random()*progressions.length);progressionChordIndex=0
-    }pick()
+    if(progressionChordKey(progressions[currentProgressionIndex]?.chords[progressionChordIndex])===previousKey){
+      const alternatives=[];progressions.forEach((sequence,index)=>sequence.chords.forEach((chord,chordIndex)=>{if(progressionChordKey(chord)!==previousKey)alternatives.push({index,chordIndex})}));
+      if(alternatives.length){const next=alternatives[Math.floor(Math.random()*alternatives.length)];currentProgressionIndex=next.index;progressionChordIndex=next.chordIndex}
+    }
+    pick()
   }
   function setStatus(title,detail,icon){
     $('statusTitle').textContent=title;$('statusDetail').textContent=detail;$('statusIcon').textContent=icon
@@ -347,14 +365,13 @@
   }
   function midiChordMatches(){
     if(!midiInput||midiAwaitingRelease||!current||deckPaused)return false;
-    const chroma=new Float32Array(12);for(const pitch of midiNotes.values())chroma[pitch%12]=1;
     const targetPCs=current.q.ints.map(interval=>(current.root+interval)%12);
-    return evaluateChordMatch(chroma,current.root,current.q,targetPCs).matched
+    return targetPCs.every(pc=>midiAttempt.has(pc))
   }
   function evaluateMidiInput(){
     const activeNotes=new Set(midiNotes.values());updateRegistered(activeNotes);
     if(midiAwaitingRelease){
-      clearMidiMatchTimer();if(activeNotes.size)return;midiAwaitingRelease=false
+      clearMidiMatchTimer();if(activeNotes.size)return;midiAwaitingRelease=false;midiAttempt.clear()
     }
     if(midiChordMatches()){
       if(!midiMatchTimer)midiMatchTimer=setTimeout(()=>{midiMatchTimer=0;if(midiChordMatches())succeed()},150)
@@ -363,10 +380,16 @@
   }
   function handleMidiMessage(event){
     const [status,pitch,velocity]=event.data,command=status&0xf0,channel=status&0x0f,key=`${channel}:${pitch}`;
-    if(command===0x90&&velocity>0)midiNotes.set(key,pitch);
+    if(command===0x90&&velocity>0){
+      midiNotes.set(key,pitch);
+      if(current&&!deckPaused&&!midiAwaitingRelease){
+        const targetPCs=current.q.ints.map(interval=>(current.root+interval)%12);
+        if(targetPCs.includes(pitch%12))midiAttempt.add(pitch%12);else{midiAttempt.clear();clearMidiMatchTimer()}
+      }
+    }
     else if(command===0x80||(command===0x90&&velocity===0))midiNotes.delete(key);
     else if(command===0xb0&&(pitch===120||pitch===123)){
-      for(const noteKey of midiNotes.keys())if(noteKey.startsWith(`${channel}:`))midiNotes.delete(noteKey)
+      for(const noteKey of midiNotes.keys())if(noteKey.startsWith(`${channel}:`))midiNotes.delete(noteKey);midiAttempt.clear();clearMidiMatchTimer()
     }
     else return;
     evaluateMidiInput()
@@ -507,6 +530,10 @@
           smoothedScores[pc]=.50*smoothedScores[pc]+.50*rawChroma[pc]
         }
         const targetPCs=current.q.ints.map(i=>(current.root+i)%12),chordResult=evaluateChordMatch(smoothedScores,current.root,current.q,targetPCs),live=new Set();
+        let dominantPC=0;for(let pc=1;pc<12;pc++)if(rawChroma[pc]>rawChroma[dominantPC])dominantPC=pc;
+        if(Math.max(...rawChroma)>=.25&&!audioAttemptBlocked){
+          if(targetPCs.includes(dominantPC))audioAttempt.add(dominantPC);else{audioAttempt.clear();audioAttemptBlocked=true}
+        }
         chordResult.activePCs.forEach(pc=>{
           let bestM=-1,bestS=0;
           for(let m=36+pc;m<84;m+=12){
@@ -516,13 +543,13 @@
           if(bestM>=0&&bestS>0.10)live.add(bestM)
         });
         updateRegistered(live);
-        if(chordResult.matched){
+        if(!audioAttemptBlocked&&(chordResult.matched||targetPCs.every(pc=>audioAttempt.has(pc)))){
           if(!goodSince)goodSince=performance.now();else if(performance.now()-goodSince>=130)succeed()
         }
         else goodSince=0
       }
       else{
-        goodSince=0;for(let i=0;i<12;i++)smoothedScores[i]*=.85;updateRegistered(new Set())
+        goodSince=0;if(audioAttemptBlocked){audioAttemptBlocked=false;audioAttempt.clear()}for(let i=0;i<12;i++)smoothedScores[i]*=.85;updateRegistered(new Set())
       }raf=requestAnimationFrame(loop)
     };loop()
   }
